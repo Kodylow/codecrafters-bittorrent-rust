@@ -31,6 +31,7 @@ fn main() -> Result<()> {
             let bytes = std::fs::read(path)?;
             let torrent = TorrentMetainfo::from_bytes(&bytes)?;
             println!("Tracker URL: {}", torrent.announce);
+            println!("Length: {}", torrent.info.length);
         }
     }
     Ok(())
