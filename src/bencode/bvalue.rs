@@ -65,8 +65,22 @@ impl Display for BValue {
             BValue::Integer(n) => write!(f, "{}", n),
             // Requires quotes around string per the BitTorrent specification
             BValue::String(s) => write!(f, "\"{}\"", s),
-            BValue::List(arr) => write!(f, "{:?}", arr),
-            BValue::Dict(map) => write!(f, "{:?}", map),
+            BValue::List(arr) => write!(
+                f,
+                "[{}]",
+                arr.iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            BValue::Dict(map) => write!(
+                f,
+                "{}",
+                map.iter()
+                    .map(|(k, v)| format!("{}: {}", k, v))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         }
     }
 }
