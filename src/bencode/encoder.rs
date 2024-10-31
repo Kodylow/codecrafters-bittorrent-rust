@@ -96,6 +96,21 @@ impl Encoder {
         self.output.push('e');
         Ok(())
     }
+
+    pub fn encode_to_bytes(&mut self, value: &serde_json::Value) -> Result<Vec<u8>> {
+        let encoded = self.encode(value)?;
+        Ok(encoded.into_bytes())
+    }
+
+    pub fn encode_bvalue(&mut self, value: &BValue) -> Result<String> {
+        self.encode_value(value)?;
+        Ok(self.output.clone())
+    }
+
+    pub fn encode_bvalue_to_bytes(&mut self, value: &BValue) -> Result<Vec<u8>> {
+        self.encode_value(value)?;
+        Ok(self.output.as_bytes().to_vec())
+    }
 }
 
 #[cfg(test)]

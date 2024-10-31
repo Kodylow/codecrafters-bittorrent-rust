@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::fmt::Display;
 
 use crate::torrent::metainfo::TorrentInfo;
@@ -115,5 +116,46 @@ impl Display for BValue {
                 write!(f, "}}")
             }
         }
+    }
+}
+
+impl BValue {
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut encoder = crate::bencode::encoder::Encoder::new();
+        encoder.encode_bvalue_to_bytes(self)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let mut decoder = crate::bencode::decoder::Decoder::new_from_bytes(bytes);
+        decoder.parse()
+    }
+
+    pub fn from_str(s: &str) -> Result<Self> {
+        let mut decoder = crate::bencode::decoder::Decoder::new(s);
+        decoder.parse()
+    }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        self.clone().into()
+    }
+
+    pub fn from_json(value: &serde_json::Value) -> Self {
+        value.clone().into()
+    }
+}
+
+impl TryFrom<&[u8]> for BValue {
+    type Error = anyhow::Error;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        Self::from_bytes(bytes)
+    }
+}
+
+impl TryFrom<&str> for BValue {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_str(s)
     }
 }
