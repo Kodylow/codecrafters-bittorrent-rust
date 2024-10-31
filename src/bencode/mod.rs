@@ -15,6 +15,13 @@ impl Bencode {
         decoder::Decoder::new(input).parse()
     }
 
+    /// Decode bencode bytes into a bvalue
+    pub fn decode_bytes(input: &[u8]) -> Result<BValue> {
+        decoder::Decoder::new_from_bytes(input)
+            .parse()
+            .map_err(|e| anyhow::anyhow!("Failed to decode bencode bytes: {}", e))
+    }
+
     /// Encode plaintext to bencode string
     pub fn encode(value: &serde_json::Value) -> Result<String> {
         encoder::Encoder::new().encode(value)

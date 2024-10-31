@@ -19,13 +19,21 @@ use super::bvalue::BValue;
 /// The decoder maintains its position in the input string and parses values incrementally.
 #[derive(Debug)]
 pub struct Decoder<'a> {
-    input: &'a str,
+    input: &'a [u8],
     position: usize,
 }
 
 impl<'a> Decoder<'a> {
     /// Creates a new decoder for the given input string.
     pub fn new(input: &'a str) -> Self {
+        Self {
+            input: input.as_bytes(),
+            position: 0,
+        }
+    }
+
+    /// Creates a new decoder for the given input bytes.
+    pub fn new_from_bytes(input: &'a [u8]) -> Self {
         Self { input, position: 0 }
     }
 
@@ -34,29 +42,29 @@ impl<'a> Decoder<'a> {
         self.parse_value()
     }
 
-    /// Returns the next character in the input without consuming it.
-    fn peek_char(&self) -> Option<char> {
-        self.input[self.position..].chars().next()
+    /// Returns the next byte in the input without consuming it.
+    fn peek(&self) -> Option<u8> {
+        self.input.get(self.position + 1).copied()
     }
 
-    /// Consumes and returns the next character in the input.
-    fn consume_char(&mut self) -> Option<char> {
-        let c = self.peek_char()?;
-        self.position += c.len_utf8();
-        Some(c)
+    /// Consumes and returns the next byte in the input.
+    fn consume(&mut self) -> Option<u8> {
+        let b = self.peek()?;
+        self.position += 1;
+        Some(b)
     }
 
-    /// Consumes characters until the given delimiter is found.
+    /// Consumes bytes until the given delimiter is found.
     /// Returns the consumed substring, excluding the delimiter.
-    fn consume_until(&mut self, delimiter: char) -> Result<&'a str> {
+    fn consume_until(&mut self, delimiter: u8) -> Result<&'a [u8]> {
         let start = self.position;
-        while let Some(c) = self.peek_char() {
-            if c == delimiter {
+        while let Some(b) = self.peek() {
+            if b == delimiter {
                 let result = &self.input[start..self.position];
-                self.consume_char(); // consume the delimiter
+                self.consume(); // consume the delimiter
                 return Ok(result);
             }
-            self.consume_char();
+            self.consume();
         }
         Err(anyhow::anyhow!("Unexpected end of input"))
     }
@@ -67,11 +75,11 @@ impl<'a> Decoder<'a> {
     /// - 'd' for dictionaries
     /// - digit for strings
     fn parse_value(&mut self) -> Result<BValue> {
-        match self.peek_char() {
-            Some('i') => Ok(BValue::Integer(self.parse_integer()?)),
-            Some('l') => self.parse_list(),
-            Some('d') => self.parse_dict(),
-            Some(c) if c.is_digit(10) => Ok(BValue::String(self.parse_string()?)),
+        match self.peek() {
+            Some(b'i') => Ok(BValue::Integer(self.parse_integer()?)),
+            Some(b'l') => self.parse_list(),
+            Some(b'd') => self.parse_dict(),
+            Some(c) if c.is_ascii_digit() => Ok(BValue::String(self.parse_string()?)),
             Some(c) => {
                 error!(
                     "Unhandled encoded value at position {}: {}",
@@ -85,33 +93,36 @@ impl<'a> Decoder<'a> {
 
     /// Parses a bencoded integer of the form `i<number>e`.
     fn parse_integer(&mut self) -> Result<i64> {
-        self.consume_char(); // consume 'i'
-        let num_str = self.consume_until('e')?;
-        num_str.parse::<i64>().map_err(Into::into)
+        self.consume(); // consume 'i'
+        let num_bytes = self.consume_until(b'e')?;
+        std::str::from_utf8(num_bytes)
+            .map(|num_str| num_str.parse::<i64>().map_err(Into::into))
+            .map_err(|e| anyhow::anyhow!("Failed to parse integer: {}", e))?
     }
 
     /// Parses a bencoded string of the form `<length>:<contents>`.
     fn parse_string(&mut self) -> Result<String> {
-        let len_str = self.consume_until(':')?;
-        let len = len_str.parse::<usize>()?;
+        let len_bytes = self.consume_until(b':')?;
+        let len = std::str::from_utf8(len_bytes)?.parse::<usize>()?;
 
         let start = self.position;
         for _ in 0..len {
-            self.consume_char()
-                .ok_or(anyhow::anyhow!("String too short"))?;
+            self.consume();
         }
-        let string = &self.input[start..self.position];
-        Ok(string.to_string())
+        let string_bytes = &self.input[start..self.position];
+        std::str::from_utf8(string_bytes)
+            .map(|string| string.to_string())
+            .map_err(|e| anyhow::anyhow!("Failed to parse string: {}", e))
     }
 
     /// Parses a bencoded list of the form `l<bencoded values>e`.
     fn parse_list(&mut self) -> Result<BValue> {
-        self.consume_char(); // consume 'l'
+        self.consume(); // consume 'l'
         let mut values = Vec::new();
 
-        while let Some(c) = self.peek_char() {
-            if c == 'e' {
-                self.consume_char();
+        while let Some(b) = self.peek() {
+            if b == b'e' {
+                self.consume();
                 return Ok(BValue::List(values));
             }
             let value: BValue = self.parse_value()?.into();
@@ -123,12 +134,12 @@ impl<'a> Decoder<'a> {
     /// Parses a bencoded dictionary of the form `d<bencoded string><bencoded value>e`.
     /// Dictionary keys must be strings according to the specification.
     fn parse_dict(&mut self) -> Result<BValue> {
-        self.consume_char(); // consume 'd'
+        self.consume(); // consume 'd'
         let mut map = std::collections::BTreeMap::new();
 
-        while let Some(c) = self.peek_char() {
-            if c == 'e' {
-                self.consume_char();
+        while let Some(b) = self.peek() {
+            if b == b'e' {
+                self.consume();
                 return Ok(BValue::Dict(map));
             }
 

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bencode::Bencode;
-use torrent::Torrent;
+use torrent::metainfo::TorrentMetainfo;
 use tracing::info;
 
 pub mod bencode;
@@ -29,7 +29,7 @@ fn main() -> Result<()> {
         cli::Command::Info { path } => {
             info!("Getting info about torrent file: {}", path);
             let bytes = std::fs::read(path)?;
-            let torrent = Torrent::from_bytes(&bytes)?;
+            let torrent = TorrentMetainfo::from_bytes(&bytes)?;
             println!("{:?}", torrent);
         }
     }
