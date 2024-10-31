@@ -1,7 +1,5 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
+use bvalue::BValue;
 
 mod bvalue;
 mod decoder;
@@ -12,28 +10,14 @@ mod encoder;
 pub struct Bencode;
 
 impl Bencode {
-    /// Decode bencode string into any type that implements Deserialize
-    pub fn decode_str<T: for<'de> Deserialize<'de>>(input: &str) -> Result<T> {
+    /// Decode bencode string into a bvalue
+    pub fn decode(input: &str) -> Result<BValue> {
         let value = decoder::Decoder::new(input).parse()?;
-        Ok(serde_json::from_value(value)?)
+        Ok(value.into())
     }
 
-    /// Decode bencode from file into any type that implements Deserialize
-    pub fn decode_file<T: for<'de> Deserialize<'de>>(path: impl Into<PathBuf>) -> Result<T> {
-        let contents = fs::read_to_string(path.into())?;
-        Self::decode_str(&contents)
-    }
-
-    /// Encode any serializable type to bencode string
-    pub fn encode_str<T: Serialize>(value: &T) -> Result<String> {
-        let value = serde_json::to_value(value)?;
-        encoder::Encoder::new().encode(&value)
-    }
-
-    /// Encode any serializable type to bencode file
-    pub fn encode_file<T: Serialize>(value: &T, path: impl Into<PathBuf>) -> Result<()> {
-        let encoded = Self::encode_str(value)?;
-        fs::write(path.into(), encoded)?;
-        Ok(())
+    /// Encode plaintext to bencode string
+    pub fn encode(value: &serde_json::Value) -> Result<String> {
+        encoder::Encoder::new().encode(value)
     }
 }

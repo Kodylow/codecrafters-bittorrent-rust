@@ -21,20 +21,6 @@ pub enum Command {
         /// The string to encode
         input: String,
     },
-    /// Decode a bencoded file
-    DecodeFile {
-        /// Path to the bencoded file
-        input_path: String,
-        /// Output path for the decoded file
-        output_path: String,
-    },
-    /// Encode a file to a bencoded file
-    EncodeFile {
-        /// Path to the file to encode
-        input_path: String,
-        /// Output path for the bencoded file
-        output_path: String,
-    },
 }
 
 impl Args {

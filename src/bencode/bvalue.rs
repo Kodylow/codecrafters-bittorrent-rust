@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, PartialEq)]
 pub enum BValue {
     Integer(i64),
@@ -35,6 +37,17 @@ impl From<BValue> for serde_json::Value {
                 let obj = map.into_iter().map(|(k, v)| (k, v.into())).collect();
                 serde_json::Value::Object(obj)
             }
+        }
+    }
+}
+
+impl Display for BValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BValue::Integer(n) => write!(f, "{}", n),
+            BValue::String(s) => write!(f, "{}", s),
+            BValue::List(arr) => write!(f, "{:?}", arr),
+            BValue::Dict(map) => write!(f, "{:?}", map),
         }
     }
 }
