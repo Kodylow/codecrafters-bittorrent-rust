@@ -21,10 +21,10 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 
-use crate::bencode::Bencode;
+use crate::bencode::{bvalue::BValue, Bencode};
 
 /// Represents a parsed BitTorrent metainfo file.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct TorrentMetainfo {
     /// URL of the tracker server
     pub announce: String,
@@ -43,9 +43,54 @@ impl TorrentMetainfo {
     ///
     /// The parsed `TorrentMetainfo` structure wrapped in a `Result`
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let bvalue_dict = Bencode::decode_bytes(bytes)?;
-        let torrent = serde_json::from_value(bvalue_dict.into())?;
-        Ok(torrent)
+        let bvalue = Bencode::decode_bytes(bytes)?;
+        match bvalue {
+            BValue::Dict(dict) => {
+                let announce = match dict.get("announce") {
+                    Some(BValue::String(s)) => String::from_utf8_lossy(s).into_owned(),
+                    _ => return Err(anyhow::anyhow!("Missing or invalid announce field")),
+                };
+
+                let info = match dict.get("info") {
+                    Some(BValue::Dict(info_dict)) => {
+                        let name = match info_dict.get("name") {
+                            Some(BValue::String(s)) => String::from_utf8_lossy(s).into_owned(),
+                            _ => return Err(anyhow::anyhow!("Missing or invalid name field")),
+                        };
+
+                        let length = match info_dict.get("length") {
+                            Some(BValue::Integer(n)) => *n as usize,
+                            _ => return Err(anyhow::anyhow!("Missing or invalid length field")),
+                        };
+
+                        let piece_length = match info_dict.get("piece length") {
+                            Some(BValue::Integer(n)) => *n as usize,
+                            _ => {
+                                return Err(anyhow::anyhow!(
+                                    "Missing or invalid piece length field"
+                                ))
+                            }
+                        };
+
+                        let pieces = match info_dict.get("pieces") {
+                            Some(BValue::String(s)) => s.clone(),
+                            _ => return Err(anyhow::anyhow!("Missing or invalid pieces field")),
+                        };
+
+                        TorrentInfo {
+                            name,
+                            length,
+                            piece_length,
+                            pieces,
+                        }
+                    }
+                    _ => return Err(anyhow::anyhow!("Missing or invalid info dictionary")),
+                };
+
+                Ok(TorrentMetainfo { announce, info })
+            }
+            _ => Err(anyhow::anyhow!("Invalid torrent file format")),
+        }
     }
 
     /// Calculate the SHA-1 hash of the bencoded info dictionary.
@@ -56,16 +101,16 @@ impl TorrentMetainfo {
     /// # Returns
     ///
     /// A 20-byte array containing the SHA-1 hash
-    pub fn info_hash(&self) -> [u8; 20] {
-        let info_encoded = serde_bencode::to_bytes(&self.info)
-            .expect("serialization of valid info dict should never fail");
+    pub fn info_hash(&self) -> Result<[u8; 20]> {
+        let info_encoded = Bencode::encode(&serde_json::to_value(&self.info)?)?;
         let mut hasher = Sha1::new();
         hasher.update(&info_encoded);
-        hasher.finalize().into()
+        let hash = hasher.finalize();
+        Ok(hash.into())
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct TorrentInfo {
     pub name: String,
     pub length: usize,

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bvalue::BValue;
 
-mod bvalue;
+pub mod bvalue;
 mod decoder;
 mod encoder;
 

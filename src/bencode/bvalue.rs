@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::torrent::metainfo::TorrentInfo;
+
 /// Represents a Bencode value as defined in the BitTorrent specification.
 ///
 /// Bencode (pronounced like B-encode) supports four different types of values:
@@ -63,6 +65,20 @@ impl From<BValue> for serde_json::Value {
                 serde_json::Value::Object(obj)
             }
         }
+    }
+}
+
+impl From<&TorrentInfo> for BValue {
+    fn from(info: &TorrentInfo) -> Self {
+        let mut dict = std::collections::BTreeMap::new();
+        dict.insert("name".into(), BValue::String(info.name.as_bytes().to_vec()));
+        dict.insert("length".into(), BValue::Integer(info.length as i64));
+        dict.insert(
+            "piece length".into(),
+            BValue::Integer(info.piece_length as i64),
+        );
+        dict.insert("pieces".into(), BValue::String(info.pieces.clone()));
+        BValue::Dict(dict)
     }
 }
 
