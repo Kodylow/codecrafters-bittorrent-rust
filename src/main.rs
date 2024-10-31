@@ -1,9 +1,11 @@
 use anyhow::Result;
 use bencode::Bencode;
+use torrent::Torrent;
 use tracing::info;
 
 pub mod bencode;
-mod cli;
+pub mod cli;
+pub mod torrent;
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
 fn main() -> Result<()> {
@@ -23,6 +25,12 @@ fn main() -> Result<()> {
             info!("Encoding input: {}", input);
             let encoded_value = Bencode::encode(&serde_json::Value::from(input))?;
             println!("{}", encoded_value);
+        }
+        cli::Command::Info { path } => {
+            info!("Getting info about torrent file: {}", path);
+            let bytes = std::fs::read(path)?;
+            let torrent = Torrent::from_bytes(&bytes)?;
+            println!("{:?}", torrent);
         }
     }
     Ok(())

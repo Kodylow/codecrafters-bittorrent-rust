@@ -21,6 +21,11 @@ pub enum Command {
         /// The string to encode
         input: String,
     },
+    /// Info about a torrent file
+    Info {
+        /// The path to the torrent file
+        path: String,
+    },
 }
 
 impl Args {
