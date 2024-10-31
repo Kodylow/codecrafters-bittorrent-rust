@@ -1,10 +1,28 @@
 use std::fmt::Display;
 
+/// Represents a Bencode value as defined in the BitTorrent specification.
+///
+/// Bencode (pronounced like B-encode) supports four different types of values:
+/// - Byte strings (represented as [`String`])
+/// - Integers
+/// - Lists
+/// - Dictionaries
 #[derive(Debug, PartialEq)]
 pub enum BValue {
+    /// An integer value, can be positive or negative
+    /// Example: `i42e` represents 42
     Integer(i64),
+
+    /// A byte string, prefixed with its length
+    /// Example: `4:spam` represents "spam"
     String(String),
+
+    /// A list of BValue elements
+    /// Example: `l4:spami42ee` represents ["spam", 42]
     List(Vec<BValue>),
+
+    /// A dictionary mapping strings to BValues
+    /// Example: `d3:bar4:spam3:fooi42ee` represents {"bar": "spam", "foo": 42}
     Dict(std::collections::BTreeMap<String, BValue>),
 }
 
@@ -45,7 +63,8 @@ impl Display for BValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BValue::Integer(n) => write!(f, "{}", n),
-            BValue::String(s) => write!(f, "{}", s),
+            // Requires quotes around string per the BitTorrent specification
+            BValue::String(s) => write!(f, "\"{}\"", s),
             BValue::List(arr) => write!(f, "{:?}", arr),
             BValue::Dict(map) => write!(f, "{:?}", map),
         }
