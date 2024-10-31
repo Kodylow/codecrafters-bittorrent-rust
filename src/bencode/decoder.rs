@@ -45,7 +45,7 @@ impl<'a> Decoder<'a> {
 
     /// Returns the next byte in the input without consuming it.
     fn peek(&self) -> Option<u8> {
-        self.input.get(self.position + 1).copied()
+        self.input.get(self.position).copied()
     }
 
     /// Consumes and returns the next byte in the input.
@@ -103,7 +103,7 @@ impl<'a> Decoder<'a> {
     }
 
     /// Parses a bencoded string of the form `<length>:<contents>`.
-    fn parse_string(&mut self) -> Result<String> {
+    fn parse_string(&mut self) -> Result<Vec<u8>> {
         let len_bytes = self.consume_until(b':')?;
         let len = std::str::from_utf8(len_bytes)?.parse::<usize>()?;
 
@@ -114,9 +114,8 @@ impl<'a> Decoder<'a> {
             }
         }
 
-        // Handle raw bytes instead of requiring valid UTF-8
-        let bytes = &self.input[start..self.position];
-        Ok(String::from_utf8_lossy(bytes).into_owned())
+        // Return raw bytes instead of converting to String
+        Ok(self.input[start..self.position].to_vec())
     }
 
     /// Parses a bencoded list of the form `l<bencoded values>e`.
