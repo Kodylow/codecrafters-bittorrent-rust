@@ -32,7 +32,7 @@ fn main() -> Result<()> {
             let torrent = TorrentMetainfo::from_bytes(&bytes)?;
             println!("Tracker URL: {}", torrent.announce);
             println!("Length: {}", torrent.info.length);
-            println!("Info hash: {}", hex::encode(torrent.info_hash()?));
+            println!("Info Hash: {}", hex::encode(torrent.info_hash()?));
         }
     }
     Ok(())
