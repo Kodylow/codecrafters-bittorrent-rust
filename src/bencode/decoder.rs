@@ -29,8 +29,8 @@ impl<'a> Decoder<'a> {
         Self { input, position: 0 }
     }
 
-    /// Parses the complete input string into a `serde_json::Value`.
-    pub fn parse(&mut self) -> Result<serde_json::Value> {
+    /// Parses the complete input string into a `BValue`.
+    pub fn parse(&mut self) -> Result<BValue> {
         self.parse_value()
     }
 
@@ -66,22 +66,21 @@ impl<'a> Decoder<'a> {
     /// - 'l' for lists
     /// - 'd' for dictionaries
     /// - digit for strings
-    fn parse_value(&mut self) -> Result<serde_json::Value> {
-        let bvalue = match self.peek_char() {
-            Some('i') => BValue::Integer(self.parse_integer()?),
-            Some('l') => self.parse_list()?,
-            Some('d') => self.parse_dict()?,
-            Some(c) if c.is_digit(10) => BValue::String(self.parse_string()?),
+    fn parse_value(&mut self) -> Result<BValue> {
+        match self.peek_char() {
+            Some('i') => Ok(BValue::Integer(self.parse_integer()?)),
+            Some('l') => self.parse_list(),
+            Some('d') => self.parse_dict(),
+            Some(c) if c.is_digit(10) => Ok(BValue::String(self.parse_string()?)),
             Some(c) => {
                 error!(
                     "Unhandled encoded value at position {}: {}",
                     self.position, c
                 );
-                return Err(anyhow::anyhow!("Unhandled encoded value: {}", c));
+                Err(anyhow::anyhow!("Unhandled encoded value: {}", c))
             }
-            None => return Err(anyhow::anyhow!("Unexpected end of input")),
-        };
-        Ok(bvalue.into())
+            None => Err(anyhow::anyhow!("Unexpected end of input")),
+        }
     }
 
     /// Parses a bencoded integer of the form `i<number>e`.
@@ -155,51 +154,75 @@ impl<'a> Decoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn test_parse_integer() {
         let mut decoder = Decoder::new("i42e");
-        assert_eq!(decoder.parse().unwrap(), json!(42));
+        assert_eq!(decoder.parse().unwrap(), BValue::Integer(42));
 
         let mut decoder = Decoder::new("i-42e");
-        assert_eq!(decoder.parse().unwrap(), json!(-42));
+        assert_eq!(decoder.parse().unwrap(), BValue::Integer(-42));
 
         let mut decoder = Decoder::new("i0e");
-        assert_eq!(decoder.parse().unwrap(), json!(0));
+        assert_eq!(decoder.parse().unwrap(), BValue::Integer(0));
     }
 
     #[test]
     fn test_parse_string() {
         let mut decoder = Decoder::new("4:spam");
-        assert_eq!(decoder.parse().unwrap(), json!("spam"));
+        assert_eq!(decoder.parse().unwrap(), BValue::String("spam".to_string()));
 
         let mut decoder = Decoder::new("0:");
-        assert_eq!(decoder.parse().unwrap(), json!(""));
+        assert_eq!(decoder.parse().unwrap(), BValue::String("".to_string()));
 
         let mut decoder = Decoder::new("13:Hello, World!");
-        assert_eq!(decoder.parse().unwrap(), json!("Hello, World!"));
+        assert_eq!(
+            decoder.parse().unwrap(),
+            BValue::String("Hello, World!".to_string())
+        );
     }
 
     #[test]
     fn test_parse_list() {
         let mut decoder = Decoder::new("l4:spami42ee");
-        assert_eq!(decoder.parse().unwrap(), json!(["spam", 42]));
+        assert_eq!(
+            decoder.parse().unwrap(),
+            BValue::List(vec![
+                BValue::String("spam".to_string()),
+                BValue::Integer(42)
+            ])
+        );
 
         let mut decoder = Decoder::new("le");
-        assert_eq!(decoder.parse().unwrap(), json!([]));
+        assert_eq!(decoder.parse().unwrap(), BValue::List(Vec::new()));
 
         let mut decoder = Decoder::new("li1ei2ei3ee");
-        assert_eq!(decoder.parse().unwrap(), json!([1, 2, 3]));
+        assert_eq!(
+            decoder.parse().unwrap(),
+            BValue::List(vec![
+                BValue::Integer(1),
+                BValue::Integer(2),
+                BValue::Integer(3)
+            ])
+        );
     }
 
     #[test]
     fn test_parse_dict() {
         let mut decoder = Decoder::new("d3:bar4:spam3:fooi42ee");
-        assert_eq!(decoder.parse().unwrap(), json!({"bar": "spam", "foo": 42}));
+        assert_eq!(
+            decoder.parse().unwrap(),
+            BValue::Dict(std::collections::BTreeMap::from([
+                ("bar".to_string(), BValue::String("spam".to_string())),
+                ("foo".to_string(), BValue::Integer(42))
+            ]))
+        );
 
         let mut decoder = Decoder::new("de");
-        assert_eq!(decoder.parse().unwrap(), json!({}));
+        assert_eq!(
+            decoder.parse().unwrap(),
+            BValue::Dict(std::collections::BTreeMap::new())
+        );
     }
 
     #[test]
@@ -207,13 +230,23 @@ mod tests {
         let mut decoder = Decoder::new("d4:listl1:a1:b1:ce4:dictd1:x1:y1:zi42eee");
         assert_eq!(
             decoder.parse().unwrap(),
-            json!({
-                "list": ["a", "b", "c"],
-                "dict": {
-                    "x": "y",
-                    "z": 42
-                }
-            })
+            BValue::Dict(std::collections::BTreeMap::from([
+                (
+                    "list".to_string(),
+                    BValue::List(vec![
+                        BValue::String("a".to_string()),
+                        BValue::String("b".to_string()),
+                        BValue::String("c".to_string())
+                    ])
+                ),
+                (
+                    "dict".to_string(),
+                    BValue::Dict(std::collections::BTreeMap::from([
+                        ("x".to_string(), BValue::String("y".to_string())),
+                        ("z".to_string(), BValue::Integer(42))
+                    ]))
+                )
+            ]))
         );
     }
 

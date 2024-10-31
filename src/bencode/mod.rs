@@ -12,8 +12,7 @@ pub struct Bencode;
 impl Bencode {
     /// Decode bencode string into a bvalue
     pub fn decode(input: &str) -> Result<BValue> {
-        let value = decoder::Decoder::new(input).parse()?;
-        Ok(value.into())
+        decoder::Decoder::new(input).parse()
     }
 
     /// Encode plaintext to bencode string

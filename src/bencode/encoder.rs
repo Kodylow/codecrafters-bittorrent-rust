@@ -165,18 +165,28 @@ mod tests {
             .unwrap();
 
         // Create a decoder to parse and verify the structure matches
-        let mut decoder = super::decoder::Decoder::new(&encoded);
+        let mut decoder = crate::bencode::decoder::Decoder::new(&encoded);
         let decoded = decoder.parse().unwrap();
 
         assert_eq!(
             decoded,
-            json!({
-                "dict": {
-                    "x": "y",
-                    "z": 42
-                },
-                "list": ["a", "b", "c"]
-            })
+            BValue::Dict(std::collections::BTreeMap::from([
+                (
+                    "dict".to_string(),
+                    BValue::Dict(std::collections::BTreeMap::from([
+                        ("x".to_string(), BValue::String("y".to_string())),
+                        ("z".to_string(), BValue::Integer(42))
+                    ]))
+                ),
+                (
+                    "list".to_string(),
+                    BValue::List(vec![
+                        BValue::String("a".to_string()),
+                        BValue::String("b".to_string()),
+                        BValue::String("c".to_string())
+                    ])
+                )
+            ]))
         );
     }
 }
