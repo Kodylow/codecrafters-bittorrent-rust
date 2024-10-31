@@ -11,6 +11,7 @@
 
 use crate::bencode::bvalue::BValue;
 use anyhow::Result;
+use tracing::info;
 
 /// An encoder for converting data into Bencode format.
 ///
@@ -45,6 +46,7 @@ impl Encoder {
 
     /// Encodes a BValue into the internal buffer.
     fn encode_value(&mut self, value: &BValue) -> Result<()> {
+        info!("encoding value: {}", value);
         match value {
             BValue::Integer(n) => self.encode_integer(*n)?,
             BValue::String(s) => self.encode_string(s)?,
@@ -56,6 +58,7 @@ impl Encoder {
 
     /// Encodes an integer in the format: i<number>e
     fn encode_integer(&mut self, n: i64) -> Result<()> {
+        info!("encoding integer: {}", n);
         self.output.push('i');
         self.output.push_str(&n.to_string());
         self.output.push('e');
@@ -64,6 +67,7 @@ impl Encoder {
 
     /// Encodes a string in the format: <length>:<string>
     fn encode_string(&mut self, s: &str) -> Result<()> {
+        info!("encoding string: {}", s);
         self.output.push_str(&s.len().to_string());
         self.output.push(':');
         self.output.push_str(s);
@@ -72,6 +76,7 @@ impl Encoder {
 
     /// Encodes a list in the format: l<bencoded values>e
     fn encode_list(&mut self, list: &[BValue]) -> Result<()> {
+        info!("encoding list: {}", list.len());
         self.output.push('l');
         for item in list {
             self.encode_value(item)?;
@@ -82,6 +87,7 @@ impl Encoder {
 
     /// Encodes a dictionary in the format: d<bencoded string><bencoded value>e
     fn encode_dict(&mut self, dict: &std::collections::BTreeMap<String, BValue>) -> Result<()> {
+        info!("encoding dict: {}", dict.len());
         self.output.push('d');
         for (key, value) in dict {
             self.encode_string(key)?;
