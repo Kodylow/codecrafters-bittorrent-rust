@@ -47,7 +47,10 @@ impl From<BValue> for serde_json::Value {
     fn from(value: BValue) -> Self {
         match value {
             BValue::Integer(n) => serde_json::Value::Number(n.into()),
-            BValue::String(s) => serde_json::Value::String(String::from_utf8(s).unwrap()),
+            BValue::String(s) => {
+                let string = String::from_utf8_lossy(&s).into_owned();
+                serde_json::Value::String(string)
+            }
             BValue::List(arr) => {
                 serde_json::Value::Array(arr.into_iter().map(|v| v.into()).collect())
             }
@@ -63,7 +66,10 @@ impl Display for BValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BValue::Integer(n) => write!(f, "{}", n),
-            BValue::String(s) => write!(f, "\"{}\"", String::from_utf8(s.clone()).unwrap()),
+            BValue::String(s) => {
+                let string = String::from_utf8_lossy(s);
+                write!(f, "\"{}\"", string)
+            }
             BValue::List(list) => {
                 write!(f, "[")?;
                 for (i, item) in list.iter().enumerate() {
