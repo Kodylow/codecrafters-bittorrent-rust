@@ -38,7 +38,7 @@ impl From<serde_json::Value> for BValue {
                 let btree = map.into_iter().map(|(k, v)| (k, BValue::from(v))).collect();
                 BValue::Dict(btree)
             }
-            _ => BValue::String("".to_string()),
+            _ => BValue::String(String::new()),
         }
     }
 }
@@ -63,7 +63,6 @@ impl Display for BValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BValue::Integer(n) => write!(f, "{}", n),
-            // Requires quotes around string per the BitTorrent specification
             BValue::String(s) => write!(f, "\"{}\"", s),
             BValue::List(list) => {
                 write!(f, "[")?;
