@@ -17,6 +17,7 @@ use super::bvalue::BValue;
 /// A streaming decoder for bencoded data.
 ///
 /// The decoder maintains its position in the input string and parses values incrementally.
+#[derive(Debug)]
 pub struct Decoder<'a> {
     input: &'a str,
     position: usize,
@@ -131,13 +132,112 @@ impl<'a> Decoder<'a> {
                 self.consume_char();
                 return Ok(BValue::Dict(map));
             }
-            let key = match self.parse_value()?.into() {
-                BValue::String(s) => s,
-                _ => return Err(anyhow::anyhow!("Dictionary key must be a string")),
+
+            let key = match self.parse_value() {
+                Ok(val) => match val.into() {
+                    BValue::String(s) => s,
+                    _ => return Err(anyhow::anyhow!("Dictionary key must be a string")),
+                },
+                Err(_) => return Err(anyhow::anyhow!("Unterminated dictionary")),
             };
-            let value: BValue = self.parse_value()?.into();
+
+            let value: BValue = match self.parse_value() {
+                Ok(val) => val.into(),
+                Err(_) => return Err(anyhow::anyhow!("Unterminated dictionary")),
+            };
+
             map.insert(key, value);
         }
         Err(anyhow::anyhow!("Unterminated dictionary"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_parse_integer() {
+        let mut decoder = Decoder::new("i42e");
+        assert_eq!(decoder.parse().unwrap(), json!(42));
+
+        let mut decoder = Decoder::new("i-42e");
+        assert_eq!(decoder.parse().unwrap(), json!(-42));
+
+        let mut decoder = Decoder::new("i0e");
+        assert_eq!(decoder.parse().unwrap(), json!(0));
+    }
+
+    #[test]
+    fn test_parse_string() {
+        let mut decoder = Decoder::new("4:spam");
+        assert_eq!(decoder.parse().unwrap(), json!("spam"));
+
+        let mut decoder = Decoder::new("0:");
+        assert_eq!(decoder.parse().unwrap(), json!(""));
+
+        let mut decoder = Decoder::new("13:Hello, World!");
+        assert_eq!(decoder.parse().unwrap(), json!("Hello, World!"));
+    }
+
+    #[test]
+    fn test_parse_list() {
+        let mut decoder = Decoder::new("l4:spami42ee");
+        assert_eq!(decoder.parse().unwrap(), json!(["spam", 42]));
+
+        let mut decoder = Decoder::new("le");
+        assert_eq!(decoder.parse().unwrap(), json!([]));
+
+        let mut decoder = Decoder::new("li1ei2ei3ee");
+        assert_eq!(decoder.parse().unwrap(), json!([1, 2, 3]));
+    }
+
+    #[test]
+    fn test_parse_dict() {
+        let mut decoder = Decoder::new("d3:bar4:spam3:fooi42ee");
+        assert_eq!(decoder.parse().unwrap(), json!({"bar": "spam", "foo": 42}));
+
+        let mut decoder = Decoder::new("de");
+        assert_eq!(decoder.parse().unwrap(), json!({}));
+    }
+
+    #[test]
+    fn test_parse_nested() {
+        let mut decoder = Decoder::new("d4:listl1:a1:b1:ce4:dictd1:x1:y1:zi42eee");
+        assert_eq!(
+            decoder.parse().unwrap(),
+            json!({
+                "list": ["a", "b", "c"],
+                "dict": {
+                    "x": "y",
+                    "z": 42
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn test_error_cases() {
+        let cases = vec![
+            ("i42", "Unexpected end of input"),
+            ("4spam", "Unexpected end of input"),
+            ("l1:a", "Unterminated list"),
+            ("d1:a", "Unterminated dictionary"),
+            ("d1:ai1e1:b", "Unterminated dictionary"),
+            ("di1ei2ee", "Dictionary key must be a string"),
+        ];
+
+        for (input, expected_err) in cases {
+            let mut decoder = Decoder::new(input);
+            let err = decoder.parse().unwrap_err();
+            assert!(
+                err.to_string().contains(expected_err),
+                "for input '{}', expected error containing '{}', got '{}'",
+                input,
+                expected_err,
+                err
+            );
+        }
     }
 }

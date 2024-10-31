@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-/// Command line arguments for the Lox interpreter
+/// Command line arguments for the bittorrent client implementation
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 pub struct Args {

@@ -2,7 +2,7 @@ use anyhow::Result;
 use bencode::Bencode;
 use tracing::info;
 
-mod bencode;
+pub mod bencode;
 mod cli;
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"

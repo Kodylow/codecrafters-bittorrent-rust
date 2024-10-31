@@ -91,3 +91,92 @@ impl Encoder {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_encode_integer() {
+        let mut encoder = Encoder::new();
+        assert_eq!(encoder.encode(&json!(42)).unwrap(), "i42e");
+
+        let mut encoder = Encoder::new();
+        assert_eq!(encoder.encode(&json!(-42)).unwrap(), "i-42e");
+
+        let mut encoder = Encoder::new();
+        assert_eq!(encoder.encode(&json!(0)).unwrap(), "i0e");
+    }
+
+    #[test]
+    fn test_encode_string() {
+        let mut encoder = Encoder::new();
+        assert_eq!(encoder.encode(&json!("spam")).unwrap(), "4:spam");
+
+        let mut encoder = Encoder::new();
+        assert_eq!(encoder.encode(&json!("")).unwrap(), "0:");
+
+        let mut encoder = Encoder::new();
+        assert_eq!(
+            encoder.encode(&json!("Hello, World!")).unwrap(),
+            "13:Hello, World!"
+        );
+    }
+
+    #[test]
+    fn test_encode_list() {
+        let mut encoder = Encoder::new();
+        assert_eq!(
+            encoder.encode(&json!(["spam", 42])).unwrap(),
+            "l4:spami42ee"
+        );
+
+        let mut encoder = Encoder::new();
+        assert_eq!(encoder.encode(&json!([])).unwrap(), "le");
+
+        let mut encoder = Encoder::new();
+        assert_eq!(encoder.encode(&json!([1, 2, 3])).unwrap(), "li1ei2ei3ee");
+    }
+
+    #[test]
+    fn test_encode_dict() {
+        let mut encoder = Encoder::new();
+        assert_eq!(
+            encoder.encode(&json!({"bar": "spam", "foo": 42})).unwrap(),
+            "d3:bar4:spam3:fooi42ee"
+        );
+
+        let mut encoder = Encoder::new();
+        assert_eq!(encoder.encode(&json!({})).unwrap(), "de");
+    }
+
+    #[test]
+    fn test_encode_nested() {
+        let mut encoder = Encoder::new();
+        let encoded = encoder
+            .encode(&json!({
+                "dict": {
+                    "x": "y",
+                    "z": 42
+                },
+                "list": ["a", "b", "c"]
+            }))
+            .unwrap();
+
+        // Create a decoder to parse and verify the structure matches
+        let mut decoder = super::decoder::Decoder::new(&encoded);
+        let decoded = decoder.parse().unwrap();
+
+        assert_eq!(
+            decoded,
+            json!({
+                "dict": {
+                    "x": "y",
+                    "z": 42
+                },
+                "list": ["a", "b", "c"]
+            })
+        );
+    }
+}
