@@ -48,8 +48,12 @@ impl From<BValue> for serde_json::Value {
         match value {
             BValue::Integer(n) => serde_json::Value::Number(n.into()),
             BValue::String(s) => {
-                let string = String::from_utf8_lossy(&s).into_owned();
-                serde_json::Value::String(string)
+                // Convert binary data to array of numbers
+                serde_json::Value::Array(
+                    s.into_iter()
+                        .map(|b| serde_json::Value::Number(b.into()))
+                        .collect(),
+                )
             }
             BValue::List(arr) => {
                 serde_json::Value::Array(arr.into_iter().map(|v| v.into()).collect())
@@ -67,8 +71,12 @@ impl Display for BValue {
         match self {
             BValue::Integer(n) => write!(f, "{}", n),
             BValue::String(s) => {
-                let string = String::from_utf8_lossy(s);
-                write!(f, "\"{}\"", string)
+                // Display binary data as hex
+                write!(
+                    f,
+                    "\"{}\"",
+                    s.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+                )
             }
             BValue::List(list) => {
                 write!(f, "[")?;
