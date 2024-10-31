@@ -49,7 +49,7 @@ impl Encoder {
         info!("encoding value: {}", value);
         match value {
             BValue::Integer(n) => self.encode_integer(*n)?,
-            BValue::String(s) => self.encode_string(s)?,
+            BValue::String(s) => self.encode_string(&String::from_utf8(s.clone()).unwrap())?,
             BValue::List(list) => self.encode_list(list)?,
             BValue::Dict(dict) => self.encode_dict(dict)?,
         }
@@ -180,16 +180,16 @@ mod tests {
                 (
                     "dict".to_string(),
                     BValue::Dict(std::collections::BTreeMap::from([
-                        ("x".to_string(), BValue::String("y".to_string())),
+                        ("x".to_string(), BValue::String("y".as_bytes().to_vec())),
                         ("z".to_string(), BValue::Integer(42))
                     ]))
                 ),
                 (
                     "list".to_string(),
                     BValue::List(vec![
-                        BValue::String("a".to_string()),
-                        BValue::String("b".to_string()),
-                        BValue::String("c".to_string())
+                        BValue::String("a".as_bytes().to_vec()),
+                        BValue::String("b".as_bytes().to_vec()),
+                        BValue::String("c".as_bytes().to_vec())
                     ])
                 )
             ]))

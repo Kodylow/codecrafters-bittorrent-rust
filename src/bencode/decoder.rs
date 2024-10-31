@@ -81,7 +81,11 @@ impl<'a> Decoder<'a> {
             Some(b'i') => Ok(BValue::Integer(self.parse_integer()?)),
             Some(b'l') => self.parse_list(),
             Some(b'd') => self.parse_dict(),
-            Some(c) if c.is_ascii_digit() => Ok(BValue::String(self.parse_string()?)),
+            Some(c) if c.is_ascii_digit() => {
+                // Direct conversion - no need to convert to String
+                let bytes = self.parse_string()?;
+                Ok(BValue::String(bytes))
+            }
             Some(c) => {
                 error!(
                     "Unhandled encoded value at position {}: {}",
@@ -148,7 +152,7 @@ impl<'a> Decoder<'a> {
 
             let key = match self.parse_value() {
                 Ok(val) => match val.into() {
-                    BValue::String(s) => s,
+                    BValue::String(s) => String::from_utf8(s)?,
                     _ => return Err(anyhow::anyhow!("Dictionary key must be a string")),
                 },
                 Err(_) => return Err(anyhow::anyhow!("Unterminated dictionary")),
@@ -184,15 +188,21 @@ mod tests {
     #[test]
     fn test_parse_string() {
         let mut decoder = Decoder::new("4:spam");
-        assert_eq!(decoder.parse().unwrap(), BValue::String("spam".to_string()));
+        assert_eq!(
+            decoder.parse().unwrap(),
+            BValue::String("spam".as_bytes().to_vec())
+        );
 
         let mut decoder = Decoder::new("0:");
-        assert_eq!(decoder.parse().unwrap(), BValue::String("".to_string()));
+        assert_eq!(
+            decoder.parse().unwrap(),
+            BValue::String("".as_bytes().to_vec())
+        );
 
         let mut decoder = Decoder::new("13:Hello, World!");
         assert_eq!(
             decoder.parse().unwrap(),
-            BValue::String("Hello, World!".to_string())
+            BValue::String("Hello, World!".as_bytes().to_vec())
         );
     }
 
@@ -202,7 +212,7 @@ mod tests {
         assert_eq!(
             decoder.parse().unwrap(),
             BValue::List(vec![
-                BValue::String("spam".to_string()),
+                BValue::String("spam".as_bytes().to_vec()),
                 BValue::Integer(42)
             ])
         );
@@ -227,7 +237,10 @@ mod tests {
         assert_eq!(
             decoder.parse().unwrap(),
             BValue::Dict(std::collections::BTreeMap::from([
-                ("bar".to_string(), BValue::String("spam".to_string())),
+                (
+                    "bar".to_string(),
+                    BValue::String("spam".as_bytes().to_vec())
+                ),
                 ("foo".to_string(), BValue::Integer(42))
             ]))
         );
@@ -248,15 +261,15 @@ mod tests {
                 (
                     "list".to_string(),
                     BValue::List(vec![
-                        BValue::String("a".to_string()),
-                        BValue::String("b".to_string()),
-                        BValue::String("c".to_string())
+                        BValue::String("a".as_bytes().to_vec()),
+                        BValue::String("b".as_bytes().to_vec()),
+                        BValue::String("c".as_bytes().to_vec())
                     ])
                 ),
                 (
                     "dict".to_string(),
                     BValue::Dict(std::collections::BTreeMap::from([
-                        ("x".to_string(), BValue::String("y".to_string())),
+                        ("x".to_string(), BValue::String("y".as_bytes().to_vec())),
                         ("z".to_string(), BValue::Integer(42))
                     ]))
                 )
