@@ -29,3 +29,12 @@ A torrent file (also known as a metainfo file) contains a bencoded dictionary wi
   - Note: .torrent files contain bytes that aren’t valid UTF-8 characters. You'll run into problems if you try to read the contents of this file as a String. Use &[u8] or Vec<u8> instead.
 
 Note: The info dictionary looks slightly different for multi-file torrents. For this challenge, we'll only implement support for single-file torrents.
+
+## Info hash
+
+Info hash is a unique identifier for a torrent file. It's used when talking to trackers or peers.
+
+- To calculate the info hash:
+  - Extract the info dictionary from the torrent file after parsing
+  - Bencode the contents of the info dictionary
+  - Calculate the SHA-1 hash of this bencoded dictionary
