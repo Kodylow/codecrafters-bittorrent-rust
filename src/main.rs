@@ -30,7 +30,7 @@ fn main() -> Result<()> {
             info!("Getting info about torrent file: {}", path);
             let bytes = std::fs::read(path)?;
             let torrent = TorrentMetainfo::from_bytes(&bytes)?;
-            println!("{:?}", torrent);
+            println!("Tracker URL: {}", torrent.announce);
         }
     }
     Ok(())
