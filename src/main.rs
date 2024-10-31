@@ -12,15 +12,13 @@ fn main() {
     let args = cli::Args::parse();
 
     info!(
-        "Command: {:?}, Filename: {:?}",
-        args.command,
-        args.bencoded_file.display()
+        "Command: {:?}, Bencoded value: {:?}",
+        args.command, args.bencoded_value
     );
 
     match args.command {
         cli::Command::Decode => {
-            let encoded_value = std::fs::read_to_string(&args.bencoded_file).unwrap();
-            let decoded_value = decode::decode_bencoded_value(&encoded_value);
+            let decoded_value = decode::decode_bencoded_value(&args.bencoded_value);
             println!("{}", decoded_value.to_string());
         } // _ => {
           //     println!("unknown command: {:?}", args.command)

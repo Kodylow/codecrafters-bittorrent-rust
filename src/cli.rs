@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use clap::{Parser, ValueEnum};
 
 /// Available commands for the bittorrent client implementation
@@ -22,8 +20,8 @@ pub struct Args {
     pub command: Command,
 
     /// Bencoded value to decode
-    #[arg(value_name = "BENCODED_FILE")]
-    pub bencoded_file: PathBuf,
+    #[arg(value_name = "BENCODED_VALUE")]
+    pub bencoded_value: String,
 }
 
 impl Args {
