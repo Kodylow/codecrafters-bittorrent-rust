@@ -1,4 +1,5 @@
 use anyhow::Result;
+use decode::BencodeDecoder;
 use tracing::info;
 
 mod cli;
@@ -19,7 +20,7 @@ fn main() -> Result<()> {
 
     match args.command {
         cli::Command::Decode => {
-            let decoded_value = decode::decode_bencoded_value(&args.bencoded_value)?;
+            let decoded_value = BencodeDecoder::new(&args.bencoded_value).parse()?;
             println!("{}", decoded_value.to_string());
         }
     }
