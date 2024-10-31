@@ -107,12 +107,14 @@ impl<'a> Decoder<'a> {
 
         let start = self.position;
         for _ in 0..len {
-            self.consume();
+            if self.consume().is_none() {
+                return Err(anyhow::anyhow!("Unexpected end of string"));
+            }
         }
-        let string_bytes = &self.input[start..self.position];
-        std::str::from_utf8(string_bytes)
-            .map(|string| string.to_string())
-            .map_err(|e| anyhow::anyhow!("Failed to parse string: {}", e))
+
+        // Handle raw bytes instead of requiring valid UTF-8
+        let bytes = &self.input[start..self.position];
+        Ok(String::from_utf8_lossy(bytes).into_owned())
     }
 
     /// Parses a bencoded list of the form `l<bencoded values>e`.
