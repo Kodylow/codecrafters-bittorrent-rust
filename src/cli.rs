@@ -1,27 +1,40 @@
-use clap::{Parser, ValueEnum};
-
-/// Available commands for the bittorrent client implementation
-///
-/// Usage: `bittorrent decode <bencoded_value>`
-///
-/// - `Decode`: Decode the input file and print the decoded value
-#[derive(ValueEnum, Debug, Clone, PartialEq)]
-pub enum Command {
-    /// Decode input and print decoded value
-    Decode,
-}
+use clap::{Parser, Subcommand};
 
 /// Command line arguments for the Lox interpreter
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about)]
 pub struct Args {
-    /// The command to execute (decode)
-    #[arg(value_enum)]
+    #[command(subcommand)]
     pub command: Command,
+}
 
-    /// Bencoded value to decode
-    #[arg(value_name = "BENCODED_VALUE")]
-    pub bencoded_value: String,
+/// Available commands for the bittorrent client implementation
+#[derive(Subcommand, Debug)]
+pub enum Command {
+    /// Decode a bencoded string
+    Decode {
+        /// The bencoded string to decode
+        input: String,
+    },
+    /// Encode a string to a bencoded string
+    Encode {
+        /// The string to encode
+        input: String,
+    },
+    /// Decode a bencoded file
+    DecodeFile {
+        /// Path to the bencoded file
+        input_path: String,
+        /// Output path for the decoded file
+        output_path: String,
+    },
+    /// Encode a file to a bencoded file
+    EncodeFile {
+        /// Path to the file to encode
+        input_path: String,
+        /// Output path for the bencoded file
+        output_path: String,
+    },
 }
 
 impl Args {
