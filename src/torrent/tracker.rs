@@ -35,24 +35,23 @@ pub fn get_peers(announce_url: &str, info_hash: [u8; 20], file_length: u64) -> R
     info!("Getting peers for tracker URL: {}", announce_url);
     let client = reqwest::blocking::Client::new();
 
-    let request = TrackerRequest {
-        info_hash: &info_hash,
-        peer_id: PEER_ID,
-        port: PORT,
-        uploaded: 0,
-        downloaded: 0,
-        left: file_length,
-        compact: 1,
-    };
+    let encoded_hash = info_hash
+        .iter()
+        .map(|&b| format!("%{:02x}", b))
+        .collect::<String>();
 
-    info!("Request: {}", serde_urlencoded::to_string(&request)?);
-
-    let url: Url = format!(
-        "{}?{}",
+    let url = Url::parse_with_params(
         announce_url,
-        serde_urlencoded::to_string(&request)?
-    )
-    .parse()?;
+        &[
+            ("info_hash", &encoded_hash),
+            ("peer_id", &PEER_ID.to_string()),
+            ("port", &PORT.to_string()),
+            ("uploaded", &"0".to_string()),
+            ("downloaded", &"0".to_string()),
+            ("left", &file_length.to_string()),
+            ("compact", &"1".to_string()),
+        ],
+    )?;
 
     info!("Tracker URL: {}", url);
 
