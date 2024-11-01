@@ -102,10 +102,10 @@ impl TorrentMetainfo {
     ///
     /// A 20-byte array containing the SHA-1 hash
     pub fn info_hash(&self) -> Result<[u8; 20]> {
-        let info_json = serde_json::to_value(&self.info)?;
-        let info_bvalue = Bencode::encode(&info_json)?;
+        let info_bvalue = BValue::from(&self.info);
+        let encoded = info_bvalue.to_bytes()?;
         let mut hasher = Sha1::new();
-        hasher.update(&info_bvalue);
+        hasher.update(&encoded);
         let hash = hasher.finalize();
         Ok(hash.into())
     }
