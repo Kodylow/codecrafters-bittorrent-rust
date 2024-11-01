@@ -49,6 +49,15 @@ fn main() -> Result<()> {
                 println!("{}", peer);
             }
         }
+        cli::Command::Handshake { path, peer } => {
+            info!("Performing handshake with peer: {}", peer);
+            let bytes = std::fs::read(path)?;
+            let torrent = TorrentMetainfo::from_bytes(&bytes)?;
+            let info_hash = torrent.info_hash()?;
+
+            let peer = torrent::peer::Peer::new(peer.parse()?, info_hash);
+            println!("Peer ID: {}", hex::encode(peer.peer_id.unwrap()));
+        }
     }
     Ok(())
 }

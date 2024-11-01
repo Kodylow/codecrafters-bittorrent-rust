@@ -31,6 +31,13 @@ pub enum Command {
         /// The path to the torrent file
         path: String,
     },
+    /// Handshake with a peer
+    Handshake {
+        /// The path to the torrent file
+        path: String,
+        /// The peer address in format IP:PORT
+        peer: String,
+    },
 }
 
 impl Args {
