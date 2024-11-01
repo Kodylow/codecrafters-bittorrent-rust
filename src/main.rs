@@ -55,7 +55,8 @@ fn main() -> Result<()> {
             let torrent = TorrentMetainfo::from_bytes(&bytes)?;
             let info_hash = torrent.info_hash()?;
 
-            let peer = torrent::peer::Peer::new(peer.parse()?, info_hash);
+            let mut peer = torrent::peer::Peer::new(peer.parse()?, info_hash);
+            peer.connect()?;
             println!("Peer ID: {}", hex::encode(peer.peer_id.unwrap()));
         }
     }
