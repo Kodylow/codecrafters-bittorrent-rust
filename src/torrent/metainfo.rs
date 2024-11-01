@@ -20,6 +20,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
+use std::fmt;
 
 use crate::bencode::{bvalue::BValue, Bencode};
 
@@ -108,6 +109,22 @@ impl TorrentMetainfo {
         hasher.update(&encoded);
         let hash = hasher.finalize();
         Ok(hash.into())
+    }
+}
+
+impl fmt::Display for TorrentMetainfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Tracker URL: {}\n", self.announce)?;
+        write!(f, "Length: {}\n", self.info.length)?;
+        if let Ok(hash) = self.info_hash() {
+            write!(f, "Info Hash: {}\n", hex::encode(hash))?;
+        }
+        write!(f, "Piece Length: {}\n", self.info.piece_length)?;
+        writeln!(f, "Piece Hashes:")?;
+        for hash in self.info.piece_hashes() {
+            writeln!(f, "{}", hex::encode(hash))?;
+        }
+        Ok(())
     }
 }
 

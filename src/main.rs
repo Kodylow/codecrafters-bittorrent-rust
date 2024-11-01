@@ -29,16 +29,9 @@ fn main() -> Result<()> {
         cli::Command::Info { path } => {
             info!("Getting info about torrent file: {}", path);
             let bytes = std::fs::read(path)?;
-            let torrent = TorrentMetainfo::from_bytes(&bytes)?;
-            println!("Tracker URL: {}", torrent.announce);
-            println!("Length: {}", torrent.info.length);
-            println!("Info Hash: {}", hex::encode(torrent.info_hash()?));
-            println!("Piece Length: {}", torrent.info.piece_length);
-            let hashes = torrent.info.piece_hashes();
-            println!("Piece Hashes:");
-            for hash in hashes {
-                println!("{}", hex::encode(hash));
-            }
+            let torrent_info = TorrentMetainfo::from_bytes(&bytes)?;
+            // Uses the Display implementation for TorrentMetainfo
+            println!("{}", torrent_info);
         }
     }
     Ok(())
