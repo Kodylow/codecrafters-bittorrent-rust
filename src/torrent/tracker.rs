@@ -35,10 +35,15 @@ pub fn get_peers(announce_url: &str, info_hash: [u8; 20], file_length: u64) -> R
     info!("Getting peers for tracker URL: {}", announce_url);
     let client = reqwest::blocking::Client::new();
 
-    let encoded_hash = info_hash
-        .iter()
-        .map(|&b| format!("%{:02x}", b))
-        .collect::<String>();
+    let encoded_hash = String::from_utf8(
+        info_hash
+            .iter()
+            .flat_map(|&b| {
+                let s = format!("%{:02x}", b);
+                s.as_bytes().to_vec()
+            })
+            .collect(),
+    )?;
 
     let url = Url::parse_with_params(
         announce_url,
@@ -59,6 +64,7 @@ pub fn get_peers(announce_url: &str, info_hash: [u8; 20], file_length: u64) -> R
     let response_bytes = response.bytes()?;
 
     let bvalue = Bencode::decode_bytes(&response_bytes)?;
+    info!("Response: {}", bvalue);
     let peers = bvalue
         .get_dict()?
         .get("peers")
