@@ -121,8 +121,37 @@ impl Display for BValue {
 
 impl BValue {
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        let mut encoder = crate::bencode::encoder::Encoder::new();
-        encoder.encode_bvalue_to_bytes(self)
+        let mut output = Vec::new();
+        match self {
+            BValue::Integer(n) => {
+                output.extend(b"i");
+                output.extend(n.to_string().as_bytes());
+                output.extend(b"e");
+            }
+            BValue::String(s) => {
+                output.extend(s.len().to_string().as_bytes());
+                output.extend(b":");
+                output.extend(s); // Direct binary extension, no UTF-8 conversion
+            }
+            BValue::List(list) => {
+                output.extend(b"l");
+                for item in list {
+                    output.extend(item.to_bytes()?);
+                }
+                output.extend(b"e");
+            }
+            BValue::Dict(dict) => {
+                output.extend(b"d");
+                for (key, value) in dict {
+                    output.extend(key.len().to_string().as_bytes());
+                    output.extend(b":");
+                    output.extend(key.as_bytes());
+                    output.extend(value.to_bytes()?);
+                }
+                output.extend(b"e");
+            }
+        }
+        Ok(output)
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
