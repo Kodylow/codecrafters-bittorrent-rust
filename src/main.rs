@@ -35,7 +35,9 @@ fn main() -> Result<()> {
             info!("Getting peers for torrent file: {}", path);
             let bytes = std::fs::read(path)?;
             let torrent = TorrentMetainfo::from_bytes(&bytes)?;
+            info!("Tracker URL: {}", torrent.announce);
             let info_hash = torrent.info_hash()?;
+            info!("Info Hash: {}", hex::encode(info_hash));
 
             let peers = torrent::tracker::get_peers(
                 &torrent.announce,

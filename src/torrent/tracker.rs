@@ -2,6 +2,7 @@ use anyhow::Result;
 use reqwest::Url;
 use serde::Serialize;
 use std::net::Ipv4Addr;
+use tracing::info;
 
 use crate::bencode::Bencode;
 
@@ -31,6 +32,7 @@ impl std::fmt::Display for Peer {
 }
 
 pub fn get_peers(announce_url: &str, info_hash: [u8; 20], file_length: u64) -> Result<Vec<Peer>> {
+    info!("Getting peers for tracker URL: {}", announce_url);
     let client = reqwest::blocking::Client::new();
 
     let request = TrackerRequest {
@@ -43,12 +45,16 @@ pub fn get_peers(announce_url: &str, info_hash: [u8; 20], file_length: u64) -> R
         compact: 1,
     };
 
+    info!("Request: {}", serde_urlencoded::to_string(&request)?);
+
     let url: Url = format!(
         "{}?{}",
         announce_url,
         serde_urlencoded::to_string(&request)?
     )
     .parse()?;
+
+    info!("Tracker URL: {}", url);
 
     let response = client.get(url).send()?;
     let response_bytes = response.bytes()?;
