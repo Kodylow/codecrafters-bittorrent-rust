@@ -35,7 +35,7 @@ fn main() -> Result<()> {
             println!("Info Hash: {}", hex::encode(torrent.info_hash()?));
             println!("Piece Length: {}", torrent.info.piece_length);
             let hashes = torrent.info.piece_hashes();
-            println!("Pieces Hashes:");
+            println!("Piece Hashes:");
             for hash in hashes {
                 println!("{}", hex::encode(hash));
             }
