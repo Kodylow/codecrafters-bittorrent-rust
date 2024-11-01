@@ -168,23 +168,23 @@ impl<'a> Decoder<'a> {
         Err(anyhow::anyhow!("Unterminated dictionary"))
     }
 
-    /// Decodes the parsed bencoded data to a JSON value.
-    pub fn decode_to_json(&mut self) -> Result<serde_json::Value> {
-        let bvalue = self.parse()?;
-        Ok(bvalue.to_json())
-    }
+    // /// Decodes the parsed bencoded data to a JSON value.
+    // pub fn decode_to_json(&mut self) -> Result<serde_json::Value> {
+    //     let bvalue = self.parse()?;
+    //     Ok(bvalue.to_json())
+    // }
 
-    /// Decodes the parsed bencoded data to a JSON value from bytes.
-    pub fn decode_bytes_to_json(bytes: &'a [u8]) -> Result<serde_json::Value> {
-        let mut decoder = Self::new_from_bytes(bytes);
-        decoder.decode_to_json()
-    }
+    // /// Decodes the parsed bencoded data to a JSON value from bytes.
+    // pub fn decode_bytes_to_json(bytes: &'a [u8]) -> Result<serde_json::Value> {
+    //     let mut decoder = Self::new_from_bytes(bytes);
+    //     decoder.decode_to_json()
+    // }
 
-    /// Decodes the parsed bencoded data to a JSON value from a string.
-    pub fn decode_str_to_json(s: &'a str) -> Result<serde_json::Value> {
-        let mut decoder = Self::new(s);
-        decoder.decode_to_json()
-    }
+    // /// Decodes the parsed bencoded data to a JSON value from a string.
+    // pub fn decode_str_to_json(s: &'a str) -> Result<serde_json::Value> {
+    //     let mut decoder = Self::new(s);
+    //     decoder.decode_to_json()
+    // }
 }
 
 #[cfg(test)]
