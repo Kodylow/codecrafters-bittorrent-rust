@@ -26,6 +26,11 @@ pub enum Command {
         /// The path to the torrent file
         path: String,
     },
+    /// Peers for the torrent
+    Peers {
+        /// The path to the torrent file
+        path: String,
+    },
 }
 
 impl Args {

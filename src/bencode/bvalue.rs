@@ -167,6 +167,20 @@ impl BValue {
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::Value::from(self)
     }
+
+    pub fn get_dict(&self) -> Result<&std::collections::BTreeMap<String, BValue>> {
+        match self {
+            BValue::Dict(dict) => Ok(dict),
+            _ => Err(anyhow::anyhow!("Value is not a dictionary")),
+        }
+    }
+
+    pub fn get_bytes(&self) -> Result<&[u8]> {
+        match self {
+            BValue::String(bytes) => Ok(bytes),
+            _ => Err(anyhow::anyhow!("Value is not a byte string")),
+        }
+    }
 }
 
 impl TryFrom<&[u8]> for BValue {
