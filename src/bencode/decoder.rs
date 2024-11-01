@@ -10,7 +10,7 @@
 //! - Dictionaries: `d<bencoded string><bencoded value>e` (e.g. `d3:bar4:spam3:fooi42ee`)
 
 use anyhow::Result;
-use tracing::{error, info};
+use tracing::error;
 
 use super::bvalue::BValue;
 
@@ -39,7 +39,6 @@ impl<'a> Decoder<'a> {
 
     /// Parses the complete input string into a `BValue`.
     pub fn parse(&mut self) -> Result<BValue> {
-        info!("parsing value");
         self.parse_value()
     }
 
@@ -76,7 +75,6 @@ impl<'a> Decoder<'a> {
     /// - 'd' for dictionaries
     /// - digit for strings
     fn parse_value(&mut self) -> Result<BValue> {
-        info!("parsing value at position {}", self.position);
         match self.peek() {
             Some(b'i') => Ok(BValue::Integer(self.parse_integer()?)),
             Some(b'l') => self.parse_list(),
