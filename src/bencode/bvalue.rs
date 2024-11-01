@@ -136,11 +136,7 @@ impl BValue {
     }
 
     pub fn to_json(&self) -> serde_json::Value {
-        self.clone().into()
-    }
-
-    pub fn from_json(value: &serde_json::Value) -> Self {
-        value.clone().into()
+        serde_json::Value::from(self)
     }
 }
 
@@ -157,5 +153,26 @@ impl TryFrom<&str> for BValue {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         Self::from_str(s)
+    }
+}
+
+impl From<&BValue> for serde_json::Value {
+    fn from(value: &BValue) -> Self {
+        match value {
+            BValue::Integer(n) => serde_json::Value::Number((*n).into()),
+            BValue::String(s) => {
+                if s.iter().any(|&b| b < 32 || b > 126) {
+                    serde_json::Value::String(hex::encode(s))
+                } else {
+                    let string = String::from_utf8_lossy(s).into_owned();
+                    serde_json::Value::String(string)
+                }
+            }
+            BValue::List(arr) => serde_json::Value::Array(arr.iter().map(|v| v.into()).collect()),
+            BValue::Dict(map) => {
+                let obj = map.iter().map(|(k, v)| (k.clone(), v.into())).collect();
+                serde_json::Value::Object(obj)
+            }
+        }
     }
 }

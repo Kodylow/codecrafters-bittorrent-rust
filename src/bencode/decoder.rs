@@ -171,7 +171,7 @@ impl<'a> Decoder<'a> {
     /// Decodes the parsed bencoded data to a JSON value.
     pub fn decode_to_json(&mut self) -> Result<serde_json::Value> {
         let bvalue = self.parse()?;
-        Ok(bvalue.into())
+        Ok(bvalue.to_json())
     }
 
     /// Decodes the parsed bencoded data to a JSON value from bytes.
