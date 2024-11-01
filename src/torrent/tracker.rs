@@ -1,5 +1,4 @@
 use anyhow::Result;
-use reqwest::Url;
 use serde::Serialize;
 use std::net::Ipv4Addr;
 use tracing::info;
@@ -11,7 +10,6 @@ const PORT: u16 = 6881;
 
 #[derive(Debug, Serialize)]
 struct TrackerRequest<'a> {
-    info_hash: &'a [u8],
     peer_id: &'a str,
     port: u16,
     uploaded: u64,
@@ -31,32 +29,30 @@ impl std::fmt::Display for Peer {
     }
 }
 
+fn urlencode(bytes: &[u8]) -> String {
+    bytes.iter().map(|&b| format!("%{:02x}", b)).collect()
+}
+
 pub fn get_peers(announce_url: &str, info_hash: [u8; 20], file_length: u64) -> Result<Vec<Peer>> {
     info!("Getting peers for tracker URL: {}", announce_url);
     let client = reqwest::blocking::Client::new();
 
-    let encoded_hash = String::from_utf8(
-        info_hash
-            .iter()
-            .flat_map(|&b| {
-                let s = format!("%{:02x}", b);
-                s.as_bytes().to_vec()
-            })
-            .collect(),
-    )?;
+    let request = TrackerRequest {
+        peer_id: PEER_ID,
+        port: PORT,
+        uploaded: 0,
+        downloaded: 0,
+        left: file_length,
+        compact: 1,
+    };
 
-    let url = Url::parse_with_params(
+    let url_params = serde_urlencoded::to_string(&request)?;
+    let url = format!(
+        "{}?{}&info_hash={}",
         announce_url,
-        &[
-            ("info_hash", &encoded_hash),
-            ("peer_id", &PEER_ID.to_string()),
-            ("port", &PORT.to_string()),
-            ("uploaded", &"0".to_string()),
-            ("downloaded", &"0".to_string()),
-            ("left", &file_length.to_string()),
-            ("compact", &"1".to_string()),
-        ],
-    )?;
+        url_params,
+        urlencode(&info_hash)
+    );
 
     info!("Tracker URL: {}", url);
 
