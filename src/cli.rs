@@ -38,6 +38,12 @@ pub enum Command {
         /// The peer address in format IP:PORT
         peer: String,
     },
+    DownloadPiece {
+        #[arg(short)]
+        output: String,
+        path: String,
+        piece_index: usize,
+    },
 }
 
 impl Args {

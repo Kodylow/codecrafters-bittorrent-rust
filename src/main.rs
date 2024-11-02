@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bencode::Bencode;
+use sha1::Digest;
 use torrent::metainfo::TorrentMetainfo;
 use tracing::info;
 
@@ -58,6 +59,53 @@ fn main() -> Result<()> {
             let mut peer = torrent::peer::Peer::new(peer.parse()?, info_hash);
             peer.connect()?;
             println!("Peer ID: {}", hex::encode(peer.peer_id.unwrap()));
+        }
+        cli::Command::DownloadPiece {
+            output,
+            path,
+            piece_index,
+        } => {
+            info!(
+                "Downloading piece {} from torrent file: {}",
+                piece_index, path
+            );
+            let bytes = std::fs::read(path)?;
+            let torrent = TorrentMetainfo::from_bytes(&bytes)?;
+            let info_hash = torrent.info_hash()?;
+
+            // Get peers
+            let peers = torrent::tracker::get_peers(
+                &torrent.announce,
+                info_hash,
+                torrent.info.length as u64,
+            )?;
+
+            // Connect to first peer
+            let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, info_hash);
+            peer.connect()?;
+
+            // Download piece
+            let piece_length = if piece_index == torrent.info.total_pieces() - 1 {
+                torrent.info.piece_size(piece_index)
+            } else {
+                torrent.info.piece_length
+            };
+
+            let piece_data = peer.download_piece(piece_index, piece_length)?;
+
+            // Verify piece hash
+            let mut hasher = sha1::Sha1::new();
+            hasher.update(&piece_data);
+            let hash = hasher.finalize();
+            let expected_hash = &torrent.info.pieces[piece_index * 20..(piece_index + 1) * 20];
+
+            if hash.as_slice() != expected_hash {
+                return Err(anyhow::anyhow!("Piece hash verification failed"));
+            }
+
+            // Save piece to file
+            std::fs::write(output, piece_data)?;
+            info!("Successfully downloaded and verified piece {}", piece_index);
         }
     }
     Ok(())
