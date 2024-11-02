@@ -18,3 +18,7 @@ pub fn serialize_peer_id(peer_id: &[u8]) -> String {
         .take(20)
         .collect()
 }
+
+pub fn peer_id_to_string(peer_id: &[u8]) -> String {
+    peer_id.iter().map(|&b| format!("{:02x}", b)).collect()
+}
