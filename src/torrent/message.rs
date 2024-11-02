@@ -1,3 +1,17 @@
+//! BitTorrent protocol message types and encoding/decoding.
+//!
+//! Implements core BitTorrent protocol messages used for peer communication:
+//! - Keep-alive messages to maintain connections
+//! - Peer state messages (choke, unchoke, interested, not interested)
+//! - Piece availability messages (have, bitfield)
+//! - Data transfer messages (request, piece, cancel)
+//!
+//! Messages are encoded to and decoded from bytes according to the BitTorrent protocol specification.
+//! Each message consists of:
+//! - Length prefix (4 bytes)
+//! - Message ID (1 byte)
+//! - Payload (variable length)
+
 #[derive(Debug, PartialEq)]
 pub enum Message {
     KeepAlive,

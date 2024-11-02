@@ -1,12 +1,33 @@
+//! BitTorrent magnet link parsing and handling.
+//!
+//! Provides functionality for parsing magnet URIs that contain torrent metadata like:
+//! - Info hash (xt parameter)
+//! - Display name (dn parameter)
+//! - Tracker URLs (tr parameter)
+//!
+//! Magnet links allow sharing torrent metadata without a .torrent file.
+//! Format: magnet:?xt=urn:btih:<info-hash>&dn=<name>&tr=<tracker-url>
+
 use anyhow::Result;
 
+/// Represents a parsed BitTorrent magnet link
 pub struct MagnetLink {
+    /// 20-byte SHA-1 hash of the info dictionary
     pub info_hash: [u8; 20],
+    /// Optional file name of the torrent content
     pub name: Option<String>,
+    /// Optional tracker URL for peer discovery
     pub tracker: Option<String>,
 }
 
 impl MagnetLink {
+    /// Parse a magnet URI string into a MagnetLink struct
+    ///
+    /// # Arguments
+    /// * `magnet_link` - The magnet URI string to parse
+    ///
+    /// # Returns
+    /// * `Result<MagnetLink>` - Parsed magnet link on success, error on invalid format
     pub fn parse(magnet_link: &str) -> Result<Self> {
         if !magnet_link.starts_with("magnet:?") {
             return Err(anyhow::anyhow!("Not a magnet link"));
@@ -64,6 +85,13 @@ impl std::fmt::Display for MagnetLink {
     }
 }
 
+/// URL decode a percent-encoded string
+///
+/// # Arguments
+/// * `input` - The percent-encoded string to decode
+///
+/// # Returns
+/// * `Result<String>` - Decoded string on success, error on invalid encoding
 fn url_decode(input: &str) -> Result<String> {
     let mut output = String::with_capacity(input.len());
     let mut chars = input.chars();

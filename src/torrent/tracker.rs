@@ -1,3 +1,8 @@
+//! Tracker communication and peer discovery functionality.
+//!
+//! Handles communication with BitTorrent trackers to discover peers
+//! and obtain information about the swarm.
+
 use anyhow::Result;
 use serde::Serialize;
 use std::net::Ipv4Addr;
@@ -6,10 +11,14 @@ use tracing::info;
 use super::peer::PeerId;
 use crate::{bencode::Bencode, PEER_ID};
 
+/// Configuration options for tracker requests.
 #[derive(Debug)]
 pub struct TrackerConfig {
+    /// The peer ID to identify ourselves to the tracker
     pub peer_id: PeerId,
+    /// The port we're listening on for incoming connections
     pub port: u16,
+    /// Whether to request compact peer lists
     pub compact: bool,
 }
 
@@ -23,6 +32,7 @@ impl Default for TrackerConfig {
     }
 }
 
+/// Request parameters sent to the tracker.
 #[derive(Debug, Serialize)]
 struct TrackerRequest<'a> {
     peer_id: &'a str,
@@ -33,8 +43,11 @@ struct TrackerRequest<'a> {
     compact: u8,
 }
 
+/// Represents a peer in the swarm.
 pub struct Peer {
+    /// IPv4 address of the peer
     pub ip: Ipv4Addr,
+    /// Port the peer is listening on
     pub port: u16,
 }
 
@@ -44,10 +57,23 @@ impl std::fmt::Display for Peer {
     }
 }
 
+/// URL encodes a byte slice for use in tracker requests.
 fn urlencode(bytes: &[u8]) -> String {
     bytes.iter().map(|&b| format!("%{:02x}", b)).collect()
 }
 
+/// Contacts a tracker to get a list of peers for a torrent.
+///
+/// # Arguments
+///
+/// * `announce_url` - The tracker's announce URL
+/// * `info_hash` - The 20-byte SHA1 hash of the torrent's info dictionary
+/// * `file_length` - Optional total length of the torrent data in bytes
+/// * `config` - Optional tracker configuration settings
+///
+/// # Returns
+///
+/// Returns a vector of peers on success, or an error if the tracker request fails.
 pub async fn get_peers(
     announce_url: &str,
     info_hash: [u8; 20],

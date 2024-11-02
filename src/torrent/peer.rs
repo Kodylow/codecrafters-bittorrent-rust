@@ -1,3 +1,19 @@
+//! Peer-to-peer communication implementation for BitTorrent protocol.
+//!
+//! Provides functionality for connecting to and communicating with BitTorrent peers:
+//! - Peer connection management via TCP
+//! - Peer configuration (peer ID, info hash, port)
+//! - BitTorrent protocol handshaking
+//! - Message passing (choke, unchoke, interested, etc)
+//! - Piece downloading and verification
+//! - Connection state tracking
+//!
+//! The main types are:
+//! - `Peer`: Represents a connection to a BitTorrent peer
+//! - `PeerConfig`: Configuration options for peer connections
+//! - `PeerId`: 20-byte unique identifier for a peer
+//! - `InfoHash`: 20-byte SHA1 hash of torrent info dictionary
+
 use std::net::SocketAddr;
 
 use anyhow::Result;
@@ -9,13 +25,20 @@ use crate::{PEER_ID, PROTOCOL};
 
 use super::message::Message;
 
+/// A peer ID is a 20-byte unique identifier for a peer
 pub type PeerId = [u8; 20];
+
+/// An info hash is a 20-byte SHA1 hash of the info dictionary from a .torrent file
 pub type InfoHash = [u8; 20];
 
+/// Configuration options for a peer connection
 #[derive(Debug, Clone)]
 pub struct PeerConfig {
+    /// The peer ID to use when connecting
     pub peer_id: PeerId,
+    /// The info hash of the torrent
     pub info_hash: InfoHash,
+    /// The port to listen on
     pub port: u16,
 }
 
@@ -29,6 +52,7 @@ impl Default for PeerConfig {
     }
 }
 
+/// Represents a connection to a BitTorrent peer
 #[derive(Debug)]
 pub struct Peer {
     addr: SocketAddr,
@@ -38,6 +62,7 @@ pub struct Peer {
 }
 
 impl Peer {
+    /// Creates a new peer with the given socket address and configuration
     pub fn new(addr: SocketAddr, config: PeerConfig) -> Self {
         Self {
             addr,
@@ -47,6 +72,7 @@ impl Peer {
         }
     }
 
+    /// Establishes a TCP connection and performs the BitTorrent handshake
     pub async fn connect(&mut self) -> Result<()> {
         info!("Connecting to peer: {}", self.addr);
         let stream = TcpStream::connect(self.addr).await?;
@@ -55,6 +81,7 @@ impl Peer {
         Ok(())
     }
 
+    /// Performs the BitTorrent protocol handshake with extension protocol support
     async fn handshake(&mut self) -> Result<()> {
         let stream = self
             .stream
@@ -101,6 +128,7 @@ impl Peer {
         Ok(())
     }
 
+    /// Sends a BitTorrent protocol message to the peer
     pub async fn send_message(&mut self, message: Message) -> Result<()> {
         let stream = self
             .stream
@@ -111,6 +139,7 @@ impl Peer {
         Ok(())
     }
 
+    /// Receives and parses a BitTorrent protocol message from the peer
     pub async fn receive_message(&mut self) -> Result<Message> {
         let stream = self
             .stream
@@ -133,6 +162,7 @@ impl Peer {
         Message::from_bytes(&message_bytes)
     }
 
+    /// Downloads a specific piece from the peer using a series of block requests
     pub async fn download_piece(
         &mut self,
         piece_index: usize,

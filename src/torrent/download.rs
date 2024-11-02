@@ -1,3 +1,14 @@
+//! BitTorrent download functionality for retrieving torrent data.
+//!
+//! Provides core download capabilities including:
+//! - Connecting to peers and managing peer connections
+//! - Downloading individual pieces and full files
+//! - Piece verification using SHA1 hashes
+//! - Retry logic for failed downloads
+//! - Tracker communication for peer discovery
+//!
+//! The main entry point is the `Downloader` struct which handles the overall download process.
+
 use anyhow::Result;
 use sha1::Digest;
 use std::time::Duration;
@@ -10,13 +21,26 @@ use crate::torrent::{
     tracker::{self, TrackerConfig},
 };
 
+/// Manages the download of a torrent, coordinating peer connections and piece retrieval.
 pub struct Downloader {
+    /// Metadata about the torrent being downloaded
     torrent: TorrentMetainfo,
+    /// List of available peer addresses
     peers: Vec<String>,
+    /// Configuration for peer connections
     peer_config: PeerConfig,
 }
 
 impl Downloader {
+    /// Creates a new downloader instance for the given torrent.
+    ///
+    /// Contacts the tracker to discover peers and initializes the download configuration.
+    ///
+    /// # Arguments
+    /// * `torrent` - Metadata for the torrent to download
+    ///
+    /// # Returns
+    /// * `Result<Downloader>` - New downloader instance on success, error if no peers found
     pub async fn new(torrent: TorrentMetainfo) -> Result<Self> {
         let announce = torrent
             .announce
@@ -47,6 +71,15 @@ impl Downloader {
         })
     }
 
+    /// Downloads a single piece of the torrent.
+    ///
+    /// Will retry with different peers if the download fails.
+    ///
+    /// # Arguments
+    /// * `piece_index` - Index of the piece to download
+    ///
+    /// # Returns
+    /// * `Result<Vec<u8>>` - The piece data on success
     pub async fn download_piece(&self, piece_index: usize) -> Result<Vec<u8>> {
         let piece_length = self
             .torrent
@@ -77,6 +110,13 @@ impl Downloader {
         ))
     }
 
+    /// Downloads the complete torrent and saves it to a file.
+    ///
+    /// # Arguments
+    /// * `output` - Path where the downloaded file should be saved
+    ///
+    /// # Returns
+    /// * `Result<()>` - Success or error status
     pub async fn download_all(&self, output: &str) -> Result<()> {
         let mut file_data = Vec::with_capacity(self.torrent.info.as_ref().unwrap().length);
 
@@ -96,6 +136,13 @@ impl Downloader {
         Ok(())
     }
 
+    /// Attempts to download a piece from a specific peer.
+    ///
+    /// Handles the peer protocol including:
+    /// - Connecting to the peer
+    /// - Waiting for bitfield to verify piece availability
+    /// - Waiting to be unchoked
+    /// - Downloading and verifying the piece
     async fn download_piece_from_peer(
         &self,
         peer: &mut Peer,
@@ -112,6 +159,7 @@ impl Downloader {
         Ok(piece_data)
     }
 
+    /// Waits to receive the peer's bitfield and verifies they have the requested piece.
     async fn wait_for_bitfield(&self, peer: &mut Peer, piece_index: usize) -> Result<()> {
         loop {
             match peer.receive_message().await? {
@@ -135,6 +183,7 @@ impl Downloader {
         }
     }
 
+    /// Sends interested message and waits to be unchoked by the peer.
     async fn wait_for_unchoke(&self, peer: &mut Peer) -> Result<()> {
         peer.send_message(Message::Interested).await?;
 
@@ -146,6 +195,7 @@ impl Downloader {
         }
     }
 
+    /// Verifies a downloaded piece matches its expected SHA1 hash.
     fn verify_piece(&self, piece_data: &[u8], piece_index: usize) -> Result<()> {
         let mut hasher = sha1::Sha1::new();
         hasher.update(piece_data);
