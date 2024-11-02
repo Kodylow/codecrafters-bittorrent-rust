@@ -129,6 +129,11 @@ async fn handle_download_piece(output: String, path: String, piece_index: usize)
 async fn handle_download(output: String, path: String) -> Result<()> {
     info!("Downloading torrent file: {} to {}", path, output);
     let bytes = std::fs::read(path)?;
+    if let Ok(contents) = String::from_utf8(bytes.clone()) {
+        println!("File contents: {}", contents);
+    } else {
+        println!("File contents (binary): {:?}", bytes);
+    }
     let torrent = TorrentMetainfo::from_bytes(&bytes)?;
     let info_hash = torrent.info_hash()?;
 
