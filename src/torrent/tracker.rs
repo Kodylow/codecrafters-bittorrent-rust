@@ -16,7 +16,7 @@ pub struct TrackerConfig {
 impl Default for TrackerConfig {
     fn default() -> Self {
         Self {
-            peer_id: PEER_ID,
+            peer_id: *PEER_ID,
             port: 6881,
             compact: true,
         }

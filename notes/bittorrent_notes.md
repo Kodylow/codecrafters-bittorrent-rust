@@ -118,3 +118,15 @@ Optional optimization:
 
 - Pipeline multiple requests (5 pending recommended)
 - Improves download speed by reducing block transfer delays
+
+# Magnet Links
+
+Magnet links contain minimal info to discover peers without a .torrent file:
+
+- Info hash (40-char hex)
+- File name (optional)
+- Tracker URL (optional)
+
+Format:
+magnet:?xt=urn:btih:<info-hash>&dn=<name>&tr=<tracker-url>
+magnet:?xt=urn:btih:ad42ce8109f54c99613ce38f9b4d87e70f24a165&dn=magnet1.gif&tr=http%3A%2F%2Fbittorrent-test-tracker.codecrafters.io%2Fannounce

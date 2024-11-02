@@ -22,7 +22,7 @@ pub struct PeerConfig {
 impl Default for PeerConfig {
     fn default() -> Self {
         Self {
-            peer_id: PEER_ID,
+            peer_id: *PEER_ID,
             info_hash: [0u8; 20],
             port: 6881,
         }
@@ -67,7 +67,7 @@ impl Peer {
         message.extend_from_slice(PROTOCOL.as_bytes());
         message.extend_from_slice(&[0u8; 8]);
         message.extend_from_slice(&self.config.info_hash);
-        message.extend_from_slice(&PEER_ID);
+        message.extend_from_slice(&*PEER_ID);
 
         // Send handshake
         stream.write_all(&message).await?;

@@ -1,14 +1,20 @@
 use anyhow::Result;
 use bencode::Bencode;
-use torrent::{download::Downloader, metainfo::TorrentMetainfo, peer::PeerConfig};
+use once_cell::sync::Lazy;
+use torrent::{
+    download::Downloader,
+    metainfo::TorrentMetainfo,
+    peer::{PeerConfig, PeerId},
+};
 use tracing::info;
 
 pub mod bencode;
 pub mod cli;
 pub mod torrent;
+pub mod utils;
 
 pub const PROTOCOL: &str = "BitTorrent protocol";
-pub const PEER_ID: torrent::peer::PeerId = *b"00112233445566778899";
+pub static PEER_ID: Lazy<PeerId> = Lazy::new(utils::generate_peer_id);
 
 #[tokio::main]
 async fn main() -> Result<()> {
