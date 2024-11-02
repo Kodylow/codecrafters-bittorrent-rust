@@ -212,27 +212,38 @@ async fn download_piece_from_peer(
 ) -> Result<Vec<u8>> {
     peer.connect().await?;
 
-    // Wait for and verify bitfield
-    let bitfield = match peer.receive_message().await? {
-        Message::Bitfield(b) => b,
-        _ => return Err(anyhow::anyhow!("Expected bitfield message")),
-    };
-
-    // Verify piece availability in bitfield
-    let byte_index = piece_index / 8;
-    let bit_index = 7 - (piece_index % 8);
-    if byte_index >= bitfield.len() || (bitfield[byte_index] & (1 << bit_index)) == 0 {
-        return Err(anyhow::anyhow!("Peer does not have piece {}", piece_index));
+    // Wait for initial messages until we get bitfield
+    loop {
+        match peer.receive_message().await? {
+            Message::Bitfield(b) => {
+                // Verify piece availability in bitfield
+                let byte_index = piece_index / 8;
+                let bit_index = 7 - (piece_index % 8);
+                if byte_index >= b.len() || (b[byte_index] & (1 << bit_index)) == 0 {
+                    return Err(anyhow::anyhow!("Peer does not have piece {}", piece_index));
+                }
+                break;
+            }
+            Message::KeepAlive => continue, // Skip keepalive message
+            msg => {
+                println!("Unexpected message before bitfield: {:?}", msg);
+                return Err(anyhow::anyhow!("Unexpected message before bitfield"));
+            }
+        }
     }
 
     // Send interested message
     peer.send_message(Message::Interested).await?;
 
-    // Wait for unchoke
-    match peer.receive_message().await? {
-        Message::Unchoke => (),
-        _ => return Err(anyhow::anyhow!("Expected unchoke message")),
-    };
+    // Wait for unchoke, skip other messages
+    loop {
+        match peer.receive_message().await? {
+            Message::Unchoke => break,
+            Message::KeepAlive => continue,
+            Message::Choke => continue,
+            _ => continue, // Skip other messages while waiting for unchoke
+        }
+    }
 
     let piece_length = torrent.info.piece_size(piece_index);
     let piece_data = peer.download_piece(piece_index, piece_length).await?;
