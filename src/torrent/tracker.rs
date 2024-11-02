@@ -9,7 +9,7 @@ use std::net::Ipv4Addr;
 use tracing::info;
 
 use super::peer::PeerId;
-use crate::{bencode::Bencode, PEER_ID};
+use crate::{bencode::Bencode, utils::serialize_peer_id, PEER_ID};
 
 /// Configuration options for tracker requests.
 #[derive(Debug)]
@@ -86,7 +86,7 @@ pub async fn get_peers(
     let client = reqwest::Client::new();
 
     let request = TrackerRequest {
-        peer_id: std::str::from_utf8(&config.peer_id)?,
+        peer_id: &serialize_peer_id(&config.peer_id),
         port: config.port,
         uploaded: 0,
         downloaded: 0,
