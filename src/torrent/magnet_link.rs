@@ -105,6 +105,12 @@ impl MagnetLink {
         let peer_id = peer
             .peer_id
             .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
+
+        // Make sure we get all 20 bytes
+        if peer_id.len() != 20 {
+            return Err(anyhow::anyhow!("Invalid peer ID length"));
+        }
+
         Ok(peer_id.to_vec())
     }
 }
