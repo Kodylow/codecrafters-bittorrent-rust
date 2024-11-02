@@ -152,10 +152,15 @@ async fn handle_magnet_handshake(magnet_link: String) -> Result<()> {
     let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, peer_config);
     peer.connect().await?;
 
+    // Format peer ID as uppercase hex string
     let peer_id = peer
         .peer_id
         .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
-    println!("Peer ID: {}", hex::encode(peer_id));
+
+    // Print each byte as a two-digit hex number
+    let hex_string: String = peer_id.iter().map(|b| format!("{:02X}", b)).collect();
+
+    println!("Peer ID: {}", hex_string);
 
     Ok(())
 }
