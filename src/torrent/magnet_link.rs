@@ -69,7 +69,7 @@ impl MagnetLink {
         })
     }
 
-    pub async fn perform_handshake(&self) -> Result<[u8; 20]> {
+    pub async fn perform_handshake(&self) -> Result<Vec<u8>> {
         let tracker = self
             .tracker
             .as_ref()
@@ -105,7 +105,7 @@ impl MagnetLink {
         let peer_id = peer
             .peer_id
             .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
-        Ok(peer_id)
+        Ok(peer_id.to_vec())
     }
 }
 
