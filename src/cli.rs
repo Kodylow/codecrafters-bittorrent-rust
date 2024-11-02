@@ -41,10 +41,13 @@ pub enum Command {
     /// Download a piece from the torrent
     #[command(name = "download-piece")]
     DownloadPiece {
+        /// The path to the torrent file
+        path: String,
+        /// The index of the piece to download
+        piece_index: usize,
+        /// The output file path
         #[arg(short)]
         output: String,
-        path: String,
-        piece_index: usize,
     },
 }
 
