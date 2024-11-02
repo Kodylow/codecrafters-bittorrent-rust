@@ -104,7 +104,7 @@ async fn handle_download(output: String, path: String) -> Result<()> {
 }
 
 async fn handle_magnet_parse(magnet_link: String) -> Result<()> {
-    let torrent = TorrentMetainfo::from_magnet(&magnet_link).await?;
-    println!("{}", torrent);
+    let magnet = torrent::magnet_link::MagnetLink::parse(&magnet_link)?;
+    println!("{}", magnet);
     Ok(())
 }

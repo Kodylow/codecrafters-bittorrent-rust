@@ -1,10 +1,9 @@
 use anyhow::Result;
 
 pub struct MagnetLink {
-    pub url: String,
     pub info_hash: [u8; 20],
-    pub name: Option<String>,
-    pub tracker: Option<String>,
+    pub name: String,
+    pub tracker: String,
 }
 
 impl MagnetLink {
@@ -14,9 +13,8 @@ impl MagnetLink {
         }
 
         let mut info_hash = None;
-        let mut name = None;
         let mut tracker = None;
-
+        let mut name = None;
         let query = &magnet_link["magnet:?".len()..];
         for param in query.split('&') {
             let mut parts = param.split('=');
@@ -34,16 +32,16 @@ impl MagnetLink {
                         info_hash = Some(arr);
                     }
                 }
-                "dn" => name = Some(url_decode(value)?),
                 "tr" => tracker = Some(url_decode(value)?),
+                "dn" => name = Some(url_decode(value)?),
                 _ => {}
             }
         }
 
         let info_hash = info_hash.ok_or_else(|| anyhow::anyhow!("Missing info hash"))?;
-
+        let tracker = tracker.ok_or_else(|| anyhow::anyhow!("Missing tracker"))?;
+        let name = name.ok_or_else(|| anyhow::anyhow!("Missing name"))?;
         Ok(Self {
-            url: magnet_link.to_string(),
             info_hash,
             name,
             tracker,
@@ -53,9 +51,7 @@ impl MagnetLink {
 
 impl std::fmt::Display for MagnetLink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(tracker) = &self.tracker {
-            writeln!(f, "Tracker URL: {}", tracker)?;
-        }
+        writeln!(f, "Tracker URL: {}", self.tracker)?;
         write!(
             f,
             "Info Hash: {}",

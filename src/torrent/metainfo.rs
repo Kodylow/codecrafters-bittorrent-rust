@@ -98,9 +98,19 @@ impl TorrentMetainfo {
 
     /// Parse a magnet link.
     pub async fn from_magnet(magnet_link: &str) -> Result<Self> {
-        let url = MagnetLink::parse(magnet_link)?.url;
-        let bytes = reqwest::get(url).await?.bytes().await?;
-        Self::from_bytes(&bytes)
+        let magnet = MagnetLink::parse(magnet_link)?;
+
+        let torrent_info = TorrentInfo {
+            name: magnet.name,
+            length: 0,
+            piece_length: 0,
+            pieces: vec![],
+        };
+
+        Ok(TorrentMetainfo {
+            announce: magnet.tracker,
+            info: torrent_info,
+        })
     }
 
     /// Calculate the SHA-1 hash of the bencoded info dictionary.
