@@ -6,12 +6,11 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::time::{timeout, Duration};
 use tracing::{error, info};
 
-use super::{metainfo::TorrentMetainfo, peer::Peer};
-
-const MAX_PEER_RETRIES: usize = 3;
-const PEER_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_PENDING_REQUESTS: usize = 5;
-const MAX_PIECE_RETRIES: usize = 3;
+use super::peer::InfoHash;
+use super::{
+    metainfo::TorrentMetainfo,
+    peer::{Peer, PeerConfig},
+};
 
 #[derive(Debug)]
 struct PieceWork {
@@ -22,22 +21,45 @@ struct PieceWork {
 
 #[derive(Debug)]
 struct PeerState {
-    addr: String,
     successful_pieces: usize,
     failed_pieces: usize,
     last_success: std::time::Instant,
 }
 
+#[derive(Debug, Clone)]
+pub struct DownloadConfig {
+    pub peer_retries: usize,
+    pub peer_timeout: Duration,
+    pub max_pending: usize,
+    pub piece_retries: usize,
+}
+
+impl Default for DownloadConfig {
+    fn default() -> Self {
+        Self {
+            peer_retries: 3,
+            peer_timeout: Duration::from_secs(10),
+            max_pending: 5,
+            piece_retries: 3,
+        }
+    }
+}
+
 pub struct DownloadManager {
     torrent: Arc<TorrentMetainfo>,
     peers: Vec<String>,
-    info_hash: [u8; 20],
+    info_hash: InfoHash,
     pieces_queue: Arc<Mutex<Vec<PieceWork>>>,
     completed_pieces: Arc<Mutex<Vec<Option<Vec<u8>>>>>,
+    config: DownloadConfig,
 }
 
 impl DownloadManager {
-    pub fn new(torrent: TorrentMetainfo, peers: Vec<String>) -> Result<Self> {
+    pub fn new(
+        torrent: TorrentMetainfo,
+        peers: Vec<String>,
+        config: Option<DownloadConfig>,
+    ) -> Result<Self> {
         let info_hash = torrent.info_hash()?;
         let total_pieces = torrent.info.total_pieces();
         let pieces_queue = (0..total_pieces)
@@ -56,6 +78,7 @@ impl DownloadManager {
             info_hash,
             pieces_queue: Arc::new(Mutex::new(pieces_queue)),
             completed_pieces: Arc::new(Mutex::new(completed_pieces)),
+            config: config.unwrap_or_default(),
         })
     }
 
@@ -67,11 +90,16 @@ impl DownloadManager {
         torrent: Arc<TorrentMetainfo>,
         tx: mpsc::Sender<Result<()>>,
         peer_states: Arc<Mutex<HashMap<String, PeerState>>>,
-    ) {
-        let mut peer = Peer::new(peer_addr.parse().unwrap(), info_hash);
+        config: DownloadConfig,
+    ) -> Result<()> {
+        let peer_config = PeerConfig {
+            info_hash: info_hash.into(),
+            ..Default::default()
+        };
+        let mut peer = Peer::new(peer_addr.parse()?, peer_config);
 
-        'retry: for _ in 0..MAX_PEER_RETRIES {
-            match timeout(PEER_TIMEOUT, peer.connect()).await {
+        'retry: for _ in 0..config.peer_retries {
+            match timeout(config.peer_timeout, peer.connect()).await {
                 Ok(Ok(())) => {
                     let mut consecutive_failures = 0;
 
@@ -87,7 +115,7 @@ impl DownloadManager {
                             }
 
                             let mut batch = Vec::new();
-                            while batch.len() < MAX_PENDING_REQUESTS && !queue.is_empty() {
+                            while batch.len() < config.max_pending && !queue.is_empty() {
                                 if let Some(pos) = queue
                                     .iter()
                                     .enumerate()
@@ -106,7 +134,7 @@ impl DownloadManager {
 
                         for piece_work in work_batch {
                             match timeout(
-                                PEER_TIMEOUT,
+                                config.peer_timeout,
                                 peer.download_piece(piece_work.index, piece_work.length),
                             )
                             .await
@@ -149,7 +177,7 @@ impl DownloadManager {
 
                             let mut failed_piece = piece_work;
                             failed_piece.retries += 1;
-                            if failed_piece.retries < MAX_PIECE_RETRIES {
+                            if failed_piece.retries < config.piece_retries {
                                 let mut queue = pieces_queue.lock().await;
                                 queue.push(failed_piece);
                             }
@@ -161,6 +189,7 @@ impl DownloadManager {
         }
 
         tx.send(Ok(())).await.ok();
+        Ok(())
     }
 
     pub async fn download(&self) -> Result<Vec<u8>> {
@@ -175,7 +204,6 @@ impl DownloadManager {
                 states.insert(
                     peer.clone(),
                     PeerState {
-                        addr: peer.clone(),
                         successful_pieces: 0,
                         failed_pieces: 0,
                         last_success: std::time::Instant::now(),
@@ -193,6 +221,7 @@ impl DownloadManager {
             let info_hash = self.info_hash;
             let peer_addr = peer_addr.clone();
             let peer_states = peer_states.clone();
+            let config = self.config.clone();
 
             let worker = tokio::spawn(Self::worker_task(
                 peer_addr,
@@ -202,6 +231,7 @@ impl DownloadManager {
                 torrent,
                 tx,
                 peer_states,
+                config,
             ));
             workers.push(worker);
         }
@@ -236,7 +266,7 @@ impl DownloadManager {
 
         // Wait for workers to complete
         for worker in workers {
-            worker.await?;
+            worker.await??;
         }
 
         Ok(file_data)

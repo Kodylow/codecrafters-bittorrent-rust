@@ -1,12 +1,15 @@
 use anyhow::Result;
 use bencode::Bencode;
 use sha1::Digest;
-use torrent::metainfo::TorrentMetainfo;
+use torrent::{metainfo::TorrentMetainfo, peer::PeerConfig};
 use tracing::info;
 
 pub mod bencode;
 pub mod cli;
 pub mod torrent;
+
+pub const PROTOCOL: &str = "BitTorrent protocol";
+pub const PEER_ID: torrent::peer::PeerId = *b"00112233445566778899";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -45,6 +48,7 @@ async fn main() -> Result<()> {
                 &torrent.announce,
                 info_hash,
                 torrent.info.length as u64,
+                Some(torrent::tracker::TrackerConfig::default()),
             )
             .await?;
 
@@ -57,8 +61,12 @@ async fn main() -> Result<()> {
             let bytes = std::fs::read(path)?;
             let torrent = TorrentMetainfo::from_bytes(&bytes)?;
             let info_hash = torrent.info_hash()?;
+            let peer_config = PeerConfig {
+                info_hash,
+                ..Default::default()
+            };
 
-            let mut peer = torrent::peer::Peer::new(peer.parse()?, info_hash);
+            let mut peer = torrent::peer::Peer::new(peer.parse()?, peer_config);
             peer.connect().await?;
             println!("Peer ID: {}", hex::encode(peer.peer_id.unwrap()));
         }
@@ -80,12 +88,20 @@ async fn handle_download_piece(output: String, path: String, piece_index: usize)
     let bytes = std::fs::read(path)?;
     let torrent = TorrentMetainfo::from_bytes(&bytes)?;
     let info_hash = torrent.info_hash()?;
+    let peer_config = PeerConfig {
+        info_hash,
+        ..Default::default()
+    };
 
-    let peers =
-        torrent::tracker::get_peers(&torrent.announce, info_hash, torrent.info.length as u64)
-            .await?;
+    let peers = torrent::tracker::get_peers(
+        &torrent.announce,
+        info_hash,
+        torrent.info.length as u64,
+        Some(torrent::tracker::TrackerConfig::default()),
+    )
+    .await?;
 
-    let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, info_hash);
+    let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, peer_config);
     peer.connect().await?;
 
     let piece_length = if piece_index == torrent.info.total_pieces() - 1 {
@@ -116,9 +132,13 @@ async fn handle_download(output: String, path: String) -> Result<()> {
     let torrent = TorrentMetainfo::from_bytes(&bytes)?;
     let info_hash = torrent.info_hash()?;
 
-    let peers =
-        torrent::tracker::get_peers(&torrent.announce, info_hash, torrent.info.length as u64)
-            .await?;
+    let peers = torrent::tracker::get_peers(
+        &torrent.announce,
+        info_hash,
+        torrent.info.length as u64,
+        Some(torrent::tracker::TrackerConfig::default()),
+    )
+    .await?;
 
     if peers.is_empty() {
         return Err(anyhow::anyhow!("No peers available"));
@@ -126,7 +146,11 @@ async fn handle_download(output: String, path: String) -> Result<()> {
 
     let peer_addrs: Vec<String> = peers.iter().map(|p| p.to_string()).collect();
 
-    let manager = torrent::download::DownloadManager::new(torrent, peer_addrs)?;
+    let manager = torrent::download::DownloadManager::new(
+        torrent,
+        peer_addrs,
+        Some(torrent::download::DownloadConfig::default()),
+    )?;
     let file_data = manager.download().await?;
 
     tokio::fs::write(output, file_data).await?;

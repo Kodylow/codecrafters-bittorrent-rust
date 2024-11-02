@@ -5,34 +5,45 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::info;
 
+use crate::{PEER_ID, PROTOCOL};
+
 use super::message::Message;
 
-const PROTOCOL: &str = "BitTorrent protocol";
-const PEER_ID: [u8; 20] = *b"00112233445566778899";
+pub type PeerId = [u8; 20];
+pub type InfoHash = [u8; 20];
+
+#[derive(Debug)]
+pub struct PeerConfig {
+    pub peer_id: PeerId,
+    pub info_hash: InfoHash,
+    pub port: u16,
+}
+
+impl Default for PeerConfig {
+    fn default() -> Self {
+        Self {
+            peer_id: PEER_ID,
+            info_hash: [0u8; 20],
+            port: 6881,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Peer {
     addr: SocketAddr,
     stream: Option<TcpStream>,
-    pub peer_id: Option<[u8; 20]>,
-    info_hash: [u8; 20],
-    // am_choking: bool,
-    // am_interested: bool,
-    // peer_choking: bool,
-    // peer_interested: bool,
+    pub peer_id: Option<PeerId>,
+    config: PeerConfig,
 }
 
 impl Peer {
-    pub fn new(addr: SocketAddr, info_hash: [u8; 20]) -> Self {
+    pub fn new(addr: SocketAddr, config: PeerConfig) -> Self {
         Self {
             addr,
             stream: None,
             peer_id: None,
-            info_hash,
-            // am_choking: true,
-            // am_interested: false,
-            // peer_choking: true,
-            // peer_interested: false,
+            config,
         }
     }
 
@@ -55,7 +66,7 @@ impl Peer {
         message.push(19);
         message.extend_from_slice(PROTOCOL.as_bytes());
         message.extend_from_slice(&[0u8; 8]);
-        message.extend_from_slice(&self.info_hash);
+        message.extend_from_slice(&self.config.info_hash);
         message.extend_from_slice(&PEER_ID);
 
         // Send handshake
@@ -73,7 +84,7 @@ impl Peer {
         }
 
         // Verify info hash
-        if response[28..48] != self.info_hash {
+        if response[28..48] != self.config.info_hash {
             return Err(anyhow::anyhow!("Info hash mismatch in handshake"));
         }
 
@@ -190,18 +201,16 @@ mod tests {
     async fn setup_mock_peer() -> (Peer, TcpListener) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let peer = Peer::new(addr, [1u8; 20]);
+        let peer = Peer::new(addr, PeerConfig::default());
         (peer, listener)
     }
 
     #[test]
     fn test_peer_creation() {
         let addr = "127.0.0.1:8080".parse().unwrap();
-        let info_hash = [1u8; 20];
-        let peer = Peer::new(addr, info_hash);
+        let peer = Peer::new(addr, PeerConfig::default());
 
         assert_eq!(peer.addr, addr);
-        assert_eq!(peer.info_hash, info_hash);
         assert!(peer.stream.is_none());
         assert!(peer.peer_id.is_none());
     }

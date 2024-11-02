@@ -3,10 +3,25 @@ use serde::Serialize;
 use std::net::Ipv4Addr;
 use tracing::info;
 
-use crate::bencode::Bencode;
+use super::peer::PeerId;
+use crate::{bencode::Bencode, PEER_ID};
 
-const PEER_ID: &str = "00112233445566778899";
-const PORT: u16 = 6881;
+#[derive(Debug)]
+pub struct TrackerConfig {
+    pub peer_id: PeerId,
+    pub port: u16,
+    pub compact: bool,
+}
+
+impl Default for TrackerConfig {
+    fn default() -> Self {
+        Self {
+            peer_id: PEER_ID,
+            port: 6881,
+            compact: true,
+        }
+    }
+}
 
 #[derive(Debug, Serialize)]
 struct TrackerRequest<'a> {
@@ -37,17 +52,20 @@ pub async fn get_peers(
     announce_url: &str,
     info_hash: [u8; 20],
     file_length: u64,
+    config: Option<TrackerConfig>,
 ) -> Result<Vec<Peer>> {
+    let config = config.unwrap_or_default();
+
     info!("Getting peers for tracker URL: {}", announce_url);
     let client = reqwest::Client::new();
 
     let request = TrackerRequest {
-        peer_id: PEER_ID,
-        port: PORT,
+        peer_id: std::str::from_utf8(&config.peer_id)?,
+        port: config.port,
         uploaded: 0,
         downloaded: 0,
         left: file_length,
-        compact: 1,
+        compact: config.compact as u8,
     };
 
     let url_params = serde_urlencoded::to_string(&request)?;

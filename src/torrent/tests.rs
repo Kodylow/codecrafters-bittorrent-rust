@@ -30,6 +30,7 @@
 //! proper implementation of the BitTorrent specification.
 
 use super::*;
+use peer::PeerConfig;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::debug;
@@ -173,7 +174,7 @@ async fn test_piece_download() {
         .await;
 
     debug!("Connecting to mock peer at {}", peer_addr);
-    let mut peer = peer::Peer::new(peer_addr, [0u8; 20]);
+    let mut peer = peer::Peer::new(peer_addr, PeerConfig::default());
     peer.connect().await.unwrap();
     debug!("Starting piece download");
     let piece = peer.download_piece(0, 16384).await.unwrap();
@@ -202,7 +203,7 @@ async fn test_message_error_handling() {
         })
         .await;
 
-    let mut peer = peer::Peer::new(peer_addr, [0u8; 20]);
+    let mut peer = peer::Peer::new(peer_addr, PeerConfig::default());
     peer.connect().await.unwrap();
     debug!("Testing piece download with malformed message");
     assert!(peer.download_piece(0, 16384).await.is_err());
@@ -213,7 +214,7 @@ async fn test_message_error_handling() {
 async fn test_peer_connection_timeout() {
     debug!("Starting connection timeout test");
     let addr = "10.0.0.1:1234".parse().unwrap();
-    let mut peer = peer::Peer::new(addr, [0u8; 20]);
+    let mut peer = peer::Peer::new(addr, PeerConfig::default());
     debug!("Attempting to connect to unreachable peer: {}", addr);
     assert!(peer.connect().await.is_err());
 }
@@ -238,7 +239,7 @@ async fn test_message_handling_keep_alive() {
         })
         .await;
 
-    let mut peer = peer::Peer::new(peer_addr, [0u8; 20]);
+    let mut peer = peer::Peer::new(peer_addr, PeerConfig::default());
     peer.connect().await.unwrap();
     debug!("Waiting for keep-alive message");
 
@@ -315,7 +316,7 @@ async fn test_download_complete_file() {
         .await;
 
     debug!("Connecting to mock peer at {}", peer_addr);
-    let mut peer = peer::Peer::new(peer_addr, [0u8; 20]);
+    let mut peer = peer::Peer::new(peer_addr, PeerConfig::default());
     peer.connect().await.unwrap();
 
     // Download multiple pieces
