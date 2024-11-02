@@ -39,7 +39,7 @@ pub enum Command {
         peer: String,
     },
     /// Download a piece from the torrent
-    #[command(name = "download-piece")]
+    #[command(name = "download_piece")]
     DownloadPiece {
         /// The path to the torrent file
         path: String,
