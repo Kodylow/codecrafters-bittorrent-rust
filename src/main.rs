@@ -129,6 +129,6 @@ async fn handle_magnet_parse(magnet_link: String) -> Result<()> {
 async fn handle_magnet_handshake(magnet_link: String) -> Result<()> {
     let magnet = torrent::magnet_link::MagnetLink::parse(&magnet_link)?;
     let peer_id = magnet.perform_handshake().await?;
-    println!("Peer ID: {}", serialize_peer_id(&peer_id));
+    println!("Peer ID: {}", peer_id);
     Ok(())
 }

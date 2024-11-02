@@ -11,6 +11,8 @@
 use anyhow::Result;
 use tracing::{debug, info};
 
+use crate::utils::serialize_peer_id;
+
 /// Represents a parsed BitTorrent magnet link
 pub struct MagnetLink {
     /// 20-byte SHA-1 hash of the info dictionary
@@ -107,8 +109,8 @@ impl MagnetLink {
             .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
 
         debug!("Raw peer_id bytes: {:?}", peer_id);
-        let hex_string: String = peer_id.iter().map(|b| format!("{:02X}", b)).collect();
-        info!("Peer ID (hex): {}", hex_string);
+        let hex_string = serialize_peer_id(&peer_id);
+        info!("Peer ID: {}", hex_string);
 
         Ok(hex_string)
     }
