@@ -69,3 +69,52 @@ Tracker response:
   - Each peer is represented as a dictionary with the following keys:
     - `ip`: the IP address of the peer
     - `port`: the port the peer is listening on
+
+# Downloading Pieces
+
+To download a piece:
+
+1. Connect to peer and handshake (done in previous stages)
+
+2. Initial peer message exchange:
+
+   - Receive bitfield message (id=5) showing peer's available pieces
+   - Send interested message (id=2, empty payload)
+   - Wait for unchoke message (id=1, empty payload)
+
+3. Download piece in 16KiB blocks:
+
+   - Break piece into 16KiB (16384 byte) blocks
+   - For each block:
+     - Send request message (id=6):
+       - index: piece index
+       - begin: block offset (0, 16384, 32768, etc)
+       - length: block size (16384 or less for last block)
+     - Receive piece message (id=7):
+       - index: piece index
+       - begin: block offset
+       - block: actual data
+
+4. Verify piece integrity:
+   - Combine blocks into complete piece
+   - Calculate SHA-1 hash
+   - Compare against piece hash from torrent file
+
+Message Format:
+
+- 4 bytes: message length prefix
+- 1 byte: message id
+- Variable length payload
+
+Message IDs:
+
+- 5: bitfield
+- 2: interested
+- 1: unchoke
+- 6: request
+- 7: piece
+
+Optional optimization:
+
+- Pipeline multiple requests (5 pending recommended)
+- Improves download speed by reducing block transfer delays
