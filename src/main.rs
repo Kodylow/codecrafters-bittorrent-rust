@@ -144,14 +144,45 @@ async fn handle_download(output: String, path: String) -> Result<()> {
         return Err(anyhow::anyhow!("No peers available"));
     }
 
-    let peer_addrs: Vec<String> = peers.iter().map(|p| p.to_string()).collect();
+    let peer_config = PeerConfig {
+        info_hash,
+        ..Default::default()
+    };
 
-    let manager = torrent::download::DownloadManager::new(
-        torrent,
-        peer_addrs,
-        Some(torrent::download::DownloadConfig::default()),
-    )?;
-    let file_data = manager.download().await?;
+    let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, peer_config);
+    peer.connect().await?;
+
+    let mut file_data = Vec::with_capacity(torrent.info.length);
+
+    for piece_index in 0..torrent.info.total_pieces() {
+        let piece_length = if piece_index == torrent.info.total_pieces() - 1 {
+            torrent.info.piece_size(piece_index)
+        } else {
+            torrent.info.piece_length
+        };
+
+        let piece_data = peer.download_piece(piece_index, piece_length).await?;
+
+        // Verify piece hash
+        let mut hasher = sha1::Sha1::new();
+        hasher.update(&piece_data);
+        let hash = hasher.finalize();
+        let expected_hash = &torrent.info.pieces[piece_index * 20..(piece_index + 1) * 20];
+
+        if hash.as_slice() != expected_hash {
+            return Err(anyhow::anyhow!(
+                "Piece hash verification failed for piece {}",
+                piece_index
+            ));
+        }
+
+        file_data.extend(piece_data);
+        info!(
+            "Downloaded piece {}/{}",
+            piece_index + 1,
+            torrent.info.total_pieces()
+        );
+    }
 
     tokio::fs::write(output, file_data).await?;
     info!("Successfully downloaded file");
