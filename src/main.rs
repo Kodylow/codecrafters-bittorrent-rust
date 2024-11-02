@@ -130,61 +130,23 @@ async fn handle_download(output: String, path: String) -> Result<()> {
     info!("Downloading torrent file: {} to {}", path, output);
     let bytes = std::fs::read(path)?;
     let torrent = TorrentMetainfo::from_bytes(&bytes)?;
-    let info_hash = torrent.info_hash()?;
 
     let peers = torrent::tracker::get_peers(
         &torrent.announce,
-        info_hash,
+        torrent.info_hash()?,
         torrent.info.length as u64,
         Some(torrent::tracker::TrackerConfig::default()),
     )
     .await?;
 
-    if peers.is_empty() {
-        return Err(anyhow::anyhow!("No peers available"));
-    }
+    let download_manager = torrent::download::DownloadManager::new(
+        torrent,
+        peers.iter().map(|p| p.to_string()).collect(),
+        None,
+    )?;
 
-    let peer_config = PeerConfig {
-        info_hash,
-        ..Default::default()
-    };
-
-    let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, peer_config);
-    peer.connect().await?;
-
-    let mut file_data = Vec::with_capacity(torrent.info.length);
-
-    for piece_index in 0..torrent.info.total_pieces() {
-        let piece_length = if piece_index == torrent.info.total_pieces() - 1 {
-            torrent.info.piece_size(piece_index)
-        } else {
-            torrent.info.piece_length
-        };
-
-        let piece_data = peer.download_piece(piece_index, piece_length).await?;
-
-        // Verify piece hash
-        let mut hasher = sha1::Sha1::new();
-        hasher.update(&piece_data);
-        let hash = hasher.finalize();
-        let expected_hash = &torrent.info.pieces[piece_index * 20..(piece_index + 1) * 20];
-
-        if hash.as_slice() != expected_hash {
-            return Err(anyhow::anyhow!(
-                "Piece hash verification failed for piece {}",
-                piece_index
-            ));
-        }
-
-        file_data.extend(piece_data);
-        info!(
-            "Downloaded piece {}/{}",
-            piece_index + 1,
-            torrent.info.total_pieces()
-        );
-    }
-
+    let file_data = download_manager.download_single_peer().await?;
     tokio::fs::write(output, file_data).await?;
-    info!("Successfully downloaded file");
+    info!("Download completed successfully");
     Ok(())
 }

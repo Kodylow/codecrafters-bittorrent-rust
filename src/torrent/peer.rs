@@ -133,28 +133,6 @@ impl Peer {
         piece_index: usize,
         piece_length: usize,
     ) -> Result<Vec<u8>> {
-        // Wait for and verify bitfield
-        let bitfield = match self.receive_message().await? {
-            Message::Bitfield(b) => b,
-            _ => return Err(anyhow::anyhow!("Expected bitfield message")),
-        };
-
-        // Verify piece availability in bitfield
-        let byte_index = piece_index / 8;
-        let bit_index = 7 - (piece_index % 8);
-        if byte_index >= bitfield.len() || (bitfield[byte_index] & (1 << bit_index)) == 0 {
-            return Err(anyhow::anyhow!("Peer does not have requested piece"));
-        }
-
-        // Send interested
-        self.send_message(Message::Interested).await?;
-
-        // Wait for unchoke
-        match self.receive_message().await? {
-            Message::Unchoke => (),
-            _ => return Err(anyhow::anyhow!("Expected unchoke message")),
-        }
-
         const BLOCK_SIZE: u32 = 16 * 1024; // 16 KiB
         let mut piece_data = Vec::new();
         let mut remaining = piece_length;
