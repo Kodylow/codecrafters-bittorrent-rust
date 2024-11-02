@@ -208,3 +208,67 @@ fn test_message_handling_keep_alive() {
         _ => panic!("Expected keep-alive message"),
     }
 }
+
+/// Tests downloading a complete file from a peer.
+#[test]
+fn test_download_complete_file() {
+    let mock_peer = MockPeer::new();
+    let peer_addr = mock_peer.addr();
+
+    mock_peer.handle_connection(|mut stream| {
+        // Handle handshake
+        let mut handshake = [0u8; 68];
+        stream.read_exact(&mut handshake).unwrap();
+        stream.write_all(&handshake).unwrap();
+
+        // Send bitfield showing we have all pieces
+        let bitfield = message::Message::Bitfield(vec![0xFF]).to_bytes();
+        stream.write_all(&bitfield).unwrap();
+
+        // Handle interested message
+        let mut msg_len = [0u8; 4];
+        stream.read_exact(&mut msg_len).unwrap();
+        let mut msg_type = [0u8];
+        stream.read_exact(&mut msg_type).unwrap();
+        assert_eq!(msg_type[0], 2); // Interested
+
+        // Send unchoke
+        stream
+            .write_all(&message::Message::Unchoke.to_bytes())
+            .unwrap();
+
+        // Handle piece requests
+        let piece_data = vec![42u8; 16384];
+        loop {
+            let mut header = [0u8; 4];
+            if stream.read_exact(&mut header).is_err() {
+                break;
+            }
+            let mut msg_type = [0u8];
+            stream.read_exact(&mut msg_type).unwrap();
+
+            if msg_type[0] == 6 {
+                let mut request = [0u8; 12];
+                stream.read_exact(&mut request).unwrap();
+
+                let response = message::Message::Piece {
+                    index: 0,
+                    begin: 0,
+                    block: piece_data.clone(),
+                }
+                .to_bytes();
+                stream.write_all(&response).unwrap();
+            }
+        }
+    });
+
+    let mut peer = peer::Peer::new(peer_addr, [0u8; 20]);
+    peer.connect().unwrap();
+
+    // Download multiple pieces
+    for i in 0..3 {
+        let piece = peer.download_piece(i, 16384).unwrap();
+        assert_eq!(piece.len(), 16384);
+        assert!(piece.iter().all(|&b| b == 42));
+    }
+}

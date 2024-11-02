@@ -49,6 +49,15 @@ pub enum Command {
         #[arg(short)]
         output: String,
     },
+    /// Download the complete torrent
+    Download {
+        /// The output file path
+        #[arg(short)]
+        output: String,
+
+        /// The path to the torrent file
+        path: String,
+    },
 }
 
 impl Args {
