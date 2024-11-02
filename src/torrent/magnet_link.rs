@@ -9,9 +9,7 @@ pub struct MagnetLink {
 
 impl MagnetLink {
     pub fn parse(magnet_link: &str) -> Result<Self> {
-        let url = url::Url::parse(magnet_link)?;
-
-        if url.scheme() != "magnet" {
+        if !magnet_link.starts_with("magnet:?") {
             return Err(anyhow::anyhow!("Not a magnet link"));
         }
 
@@ -19,21 +17,25 @@ impl MagnetLink {
         let mut name = None;
         let mut tracker = None;
 
-        for (key, value) in url.query_pairs() {
-            match key.as_ref() {
+        let query = &magnet_link["magnet:?".len()..];
+        for param in query.split('&') {
+            let mut parts = param.split('=');
+            let key = parts.next().unwrap_or("");
+            let value = parts.next().unwrap_or("");
+
+            match key {
                 "xt" => {
                     if let Some(hash) = value.strip_prefix("urn:btih:") {
-                        let hash_bytes = hex::decode(hash)?;
-                        if hash_bytes.len() != 20 {
-                            return Err(anyhow::anyhow!("Invalid info hash length"));
-                        }
                         let mut arr = [0u8; 20];
-                        arr.copy_from_slice(&hash_bytes);
+                        for i in 0..20 {
+                            let byte = u8::from_str_radix(&hash[i * 2..i * 2 + 2], 16)?;
+                            arr[i] = byte;
+                        }
                         info_hash = Some(arr);
                     }
                 }
-                "dn" => name = Some(value.into_owned()),
-                "tr" => tracker = Some(value.into_owned()),
+                "dn" => name = Some(url_decode(value)?),
+                "tr" => tracker = Some(url_decode(value)?),
                 _ => {}
             }
         }
@@ -54,6 +56,34 @@ impl std::fmt::Display for MagnetLink {
         if let Some(tracker) = &self.tracker {
             writeln!(f, "Tracker URL: {}", tracker)?;
         }
-        write!(f, "Info Hash: {}", hex::encode(self.info_hash))
+        write!(
+            f,
+            "Info Hash: {}",
+            self.info_hash
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>()
+        )
     }
+}
+
+fn url_decode(input: &str) -> Result<String> {
+    let mut output = String::with_capacity(input.len());
+    let mut chars = input.chars();
+
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let hex = chars
+                .next()
+                .and_then(|c1| chars.next().map(|c2| (c1, c2)))
+                .ok_or_else(|| anyhow::anyhow!("Invalid percent encoding"))?;
+
+            let byte = u8::from_str_radix(&format!("{}{}", hex.0, hex.1), 16)?;
+            output.push(byte as char);
+        } else {
+            output.push(c);
+        }
+    }
+
+    Ok(output)
 }
