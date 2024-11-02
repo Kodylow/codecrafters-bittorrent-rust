@@ -7,6 +7,7 @@ use torrent::{
     peer::{PeerConfig, PeerId},
 };
 use tracing::info;
+use utils::serialize_peer_id;
 
 pub mod bencode;
 pub mod cli;
@@ -80,7 +81,7 @@ async fn main() -> Result<()> {
             let peer_id = peer
                 .peer_id
                 .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
-            println!("Peer ID: {}", hex::encode(peer_id));
+            println!("Peer ID: {}", serialize_peer_id(&peer_id));
         }
         cli::Command::DownloadPiece {
             output,
