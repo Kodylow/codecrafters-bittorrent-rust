@@ -67,6 +67,41 @@ impl MagnetLink {
             tracker,
         })
     }
+
+    pub async fn perform_handshake(&self) -> Result<String> {
+        let tracker = self
+            .tracker
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No tracker URL in magnet link"))?;
+
+        let peers = crate::torrent::tracker::get_peers(
+            tracker,
+            self.info_hash,
+            None,
+            Some(crate::torrent::tracker::TrackerConfig::default()),
+        )
+        .await?;
+
+        if peers.is_empty() {
+            return Err(anyhow::anyhow!("No peers available"));
+        }
+
+        let peer_config = crate::torrent::peer::PeerConfig {
+            info_hash: self.info_hash,
+            ..Default::default()
+        };
+
+        let mut peer = crate::torrent::peer::Peer::new(peers[0].to_string().parse()?, peer_config);
+        peer.connect().await?;
+
+        let peer_id = peer
+            .peer_id
+            .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
+
+        let hex_string: String = peer_id.iter().map(|b| format!("{:02X}", b)).collect();
+
+        Ok(hex_string)
+    }
 }
 
 impl std::fmt::Display for MagnetLink {
