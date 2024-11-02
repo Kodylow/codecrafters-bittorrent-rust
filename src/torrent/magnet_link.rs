@@ -9,9 +9,7 @@
 //! Format: magnet:?xt=urn:btih:<info-hash>&dn=<name>&tr=<tracker-url>
 
 use anyhow::Result;
-use tracing::{debug, info};
-
-use crate::utils::serialize_peer_id;
+use tracing::info;
 
 /// Represents a parsed BitTorrent magnet link
 pub struct MagnetLink {
@@ -71,7 +69,7 @@ impl MagnetLink {
         })
     }
 
-    pub async fn perform_handshake(&self) -> Result<String> {
+    pub async fn perform_handshake(&self) -> Result<[u8; 20]> {
         let tracker = self
             .tracker
             .as_ref()
@@ -107,12 +105,7 @@ impl MagnetLink {
         let peer_id = peer
             .peer_id
             .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
-
-        debug!("Raw peer_id bytes: {:?}", peer_id);
-        let hex_string = serialize_peer_id(&peer_id);
-        info!("Peer ID: {}", hex_string);
-
-        Ok(hex_string)
+        Ok(peer_id)
     }
 }
 
