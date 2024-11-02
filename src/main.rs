@@ -75,7 +75,9 @@ async fn main() -> Result<()> {
             piece_index,
         } => handle_download_piece(output, path, piece_index).await?,
         cli::Command::Download { output, path } => handle_download(output, path).await?,
+        cli::Command::MagnetParse { magnet_link } => handle_magnet_parse(magnet_link).await?,
     }
+
     Ok(())
 }
 
@@ -98,5 +100,11 @@ async fn handle_download(output: String, path: String) -> Result<()> {
     let downloader = Downloader::new(torrent).await?;
     downloader.download_all(&output).await?;
 
+    Ok(())
+}
+
+async fn handle_magnet_parse(magnet_link: String) -> Result<()> {
+    let torrent = TorrentMetainfo::from_magnet(&magnet_link).await?;
+    println!("{}", torrent);
     Ok(())
 }

@@ -24,6 +24,8 @@ use std::fmt;
 
 use crate::bencode::{bvalue::BValue, Bencode};
 
+use super::magnet_link::MagnetLink;
+
 /// Represents a parsed BitTorrent metainfo file.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct TorrentMetainfo {
@@ -92,6 +94,13 @@ impl TorrentMetainfo {
             }
             _ => Err(anyhow::anyhow!("Invalid torrent file format")),
         }
+    }
+
+    /// Parse a magnet link.
+    pub async fn from_magnet(magnet_link: &str) -> Result<Self> {
+        let url = MagnetLink::parse(magnet_link)?.url;
+        let bytes = reqwest::get(url).await?.bytes().await?;
+        Self::from_bytes(&bytes)
     }
 
     /// Calculate the SHA-1 hash of the bencoded info dictionary.

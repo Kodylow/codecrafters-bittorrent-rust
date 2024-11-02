@@ -58,6 +58,12 @@ pub enum Command {
         /// The path to the torrent file
         path: String,
     },
+    /// Parse a magnet link
+    #[command(name = "magnet_parse")]
+    MagnetParse {
+        /// The magnet link
+        magnet_link: String,
+    },
 }
 
 impl Args {
