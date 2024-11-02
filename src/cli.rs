@@ -64,6 +64,12 @@ pub enum Command {
         /// The magnet link
         magnet_link: String,
     },
+    /// Handshake with a peer from magnet link
+    #[command(name = "magnet_handshake")]
+    MagnetHandshake {
+        /// The magnet link
+        magnet_link: String,
+    },
 }
 
 impl Args {

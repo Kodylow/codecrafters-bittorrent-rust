@@ -130,3 +130,34 @@ Magnet links contain minimal info to discover peers without a .torrent file:
 Format:
 magnet:?xt=urn:btih:<info-hash>&dn=<name>&tr=<tracker-url>
 magnet:?xt=urn:btih:ad42ce8109f54c99613ce38f9b4d87e70f24a165&dn=magnet1.gif&tr=http%3A%2F%2Fbittorrent-test-tracker.codecrafters.io%2Fannounce
+
+# Extension Protocol
+
+Extension protocol allows adding functionality without breaking compatibility.
+
+Handshake reserved bytes (8 bytes total):
+00 00 00 00 00 10 00 00
+
+Setting bit 20 (from right, 0-based) indicates extension support:
+
+- Binary: .... 00010000 00000000 00000000
+- Hex: 00 00 00 00 00 10 00 00
+- Bit 20 = 1, all others = 0
+
+Extension handshake process:
+
+1. Set bit 20 in handshake reserved bytes
+2. Send handshake with modified reserved bytes
+3. Peer response indicates if they support extensions
+
+Extension messages:
+
+- ID 20: Extension protocol message
+- First byte: Extension message ID
+- Rest: bencoded payload
+
+Common extensions:
+
+- Metadata exchange (BEP 9)
+- PEX peer exchange (BEP 11)
+- DHT (BEP 5)

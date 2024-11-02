@@ -89,6 +89,9 @@ async fn main() -> Result<()> {
         } => handle_download_piece(output, path, piece_index).await?,
         cli::Command::Download { output, path } => handle_download(output, path).await?,
         cli::Command::MagnetParse { magnet_link } => handle_magnet_parse(magnet_link).await?,
+        cli::Command::MagnetHandshake { magnet_link } => {
+            handle_magnet_handshake(magnet_link).await?
+        }
     }
 
     Ok(())
@@ -119,5 +122,40 @@ async fn handle_download(output: String, path: String) -> Result<()> {
 async fn handle_magnet_parse(magnet_link: String) -> Result<()> {
     let magnet = torrent::magnet_link::MagnetLink::parse(&magnet_link)?;
     println!("{}", magnet);
+    Ok(())
+}
+
+async fn handle_magnet_handshake(magnet_link: String) -> Result<()> {
+    let magnet = torrent::magnet_link::MagnetLink::parse(&magnet_link)?;
+
+    let tracker = magnet
+        .tracker
+        .ok_or_else(|| anyhow::anyhow!("No tracker URL in magnet link"))?;
+
+    let peers = torrent::tracker::get_peers(
+        &tracker,
+        magnet.info_hash,
+        None,
+        Some(torrent::tracker::TrackerConfig::default()),
+    )
+    .await?;
+
+    if peers.is_empty() {
+        return Err(anyhow::anyhow!("No peers available"));
+    }
+
+    let peer_config = torrent::peer::PeerConfig {
+        info_hash: magnet.info_hash,
+        ..Default::default()
+    };
+
+    let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, peer_config);
+    peer.connect().await?;
+
+    let peer_id = peer
+        .peer_id
+        .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
+    println!("Peer ID: {}", hex::encode(peer_id));
+
     Ok(())
 }

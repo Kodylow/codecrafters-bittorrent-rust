@@ -65,13 +65,18 @@ impl Peer {
         let mut message = Vec::with_capacity(68);
         message.push(19);
         message.extend_from_slice(PROTOCOL.as_bytes());
-        message.extend_from_slice(&[0u8; 8]);
+
+        // Set reserved bytes with bit 20 set to 1 (extension protocol support)
+        let mut reserved = [0u8; 8];
+        reserved[5] = 0x10; // Set bit 20 (00010000)
+        message.extend_from_slice(&reserved);
+
         message.extend_from_slice(&self.config.info_hash);
         message.extend_from_slice(&*PEER_ID);
 
         // Send handshake
         stream.write_all(&message).await?;
-        info!("Sent handshake message");
+        info!("Sent handshake message with extension protocol support");
 
         // Read response
         let mut response = [0u8; 68];
