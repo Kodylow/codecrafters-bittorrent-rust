@@ -59,3 +59,13 @@ Trackers are central servers that maintain information about peers participating
 - `compact`: whether the peer list should use the compact representation
   - For the purposes of this challenge, set this to 1.
   - The compact representation is more commonly used in the wild, the non-compact representation is mostly supported for backward-compatibility.
+
+Tracker response:
+
+- `interval`: the number of seconds you should wait before requesting an update from the tracker
+- `peers`: a list of peers
+  - A string, which contains list of peers that your client can connect to.
+    - Each peer is represented using 6 bytes. The first 4 bytes are the peer's IP address and the last 2 bytes are the peer's port number.
+  - Each peer is represented as a dictionary with the following keys:
+    - `ip`: the IP address of the peer
+    - `port`: the port the peer is listening on
