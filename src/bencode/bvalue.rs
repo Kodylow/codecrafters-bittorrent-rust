@@ -219,3 +219,12 @@ impl From<&BValue> for serde_json::Value {
         }
     }
 }
+
+impl From<&Option<TorrentInfo>> for BValue {
+    fn from(opt_info: &Option<TorrentInfo>) -> Self {
+        match opt_info {
+            Some(info) => BValue::from(info),
+            None => BValue::Dict(std::collections::BTreeMap::new()),
+        }
+    }
+}

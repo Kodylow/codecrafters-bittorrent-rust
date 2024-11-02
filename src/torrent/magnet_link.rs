@@ -2,8 +2,8 @@ use anyhow::Result;
 
 pub struct MagnetLink {
     pub info_hash: [u8; 20],
-    pub name: String,
-    pub tracker: String,
+    pub name: Option<String>,
+    pub tracker: Option<String>,
 }
 
 impl MagnetLink {
@@ -39,8 +39,7 @@ impl MagnetLink {
         }
 
         let info_hash = info_hash.ok_or_else(|| anyhow::anyhow!("Missing info hash"))?;
-        let tracker = tracker.ok_or_else(|| anyhow::anyhow!("Missing tracker"))?;
-        let name = name.ok_or_else(|| anyhow::anyhow!("Missing name"))?;
+
         Ok(Self {
             info_hash,
             name,
@@ -51,7 +50,9 @@ impl MagnetLink {
 
 impl std::fmt::Display for MagnetLink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Tracker URL: {}", self.tracker)?;
+        if let Some(tracker) = &self.tracker {
+            writeln!(f, "Tracker URL: {}", tracker)?;
+        }
         write!(
             f,
             "Info Hash: {}",

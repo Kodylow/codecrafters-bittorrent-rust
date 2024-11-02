@@ -39,14 +39,18 @@ async fn main() -> Result<()> {
             info!("Getting peers for torrent file: {}", path);
             let bytes = std::fs::read(path)?;
             let torrent = TorrentMetainfo::from_bytes(&bytes)?;
-            info!("Tracker URL: {}", torrent.announce);
+            let announce = torrent
+                .announce
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No tracker URL"))?;
+            info!("Tracker URL: {}", announce);
             let info_hash = torrent.info_hash()?;
             info!("Info Hash: {}", hex::encode(info_hash));
 
             let peers = torrent::tracker::get_peers(
-                &torrent.announce,
+                announce,
                 info_hash,
-                torrent.info.length as u64,
+                torrent.info.as_ref().map(|i| i.length as u64),
                 Some(torrent::tracker::TrackerConfig::default()),
             )
             .await?;
@@ -67,7 +71,10 @@ async fn main() -> Result<()> {
 
             let mut peer = torrent::peer::Peer::new(peer.parse()?, peer_config);
             peer.connect().await?;
-            println!("Peer ID: {}", hex::encode(peer.peer_id.unwrap()));
+            let peer_id = peer
+                .peer_id
+                .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
+            println!("Peer ID: {}", hex::encode(peer_id));
         }
         cli::Command::DownloadPiece {
             output,

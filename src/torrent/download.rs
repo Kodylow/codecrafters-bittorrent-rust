@@ -18,6 +18,10 @@ pub struct Downloader {
 
 impl Downloader {
     pub async fn new(torrent: TorrentMetainfo) -> Result<Self> {
+        let announce = torrent
+            .announce
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No tracker URL"))?;
         let info_hash = torrent.info_hash()?;
         let peer_config = PeerConfig {
             info_hash,
@@ -25,9 +29,9 @@ impl Downloader {
         };
 
         let peers = tracker::get_peers(
-            &torrent.announce,
+            announce,
             info_hash,
-            torrent.info.length as u64,
+            torrent.info.as_ref().map(|i| i.length as u64),
             Some(TrackerConfig::default()),
         )
         .await?;
@@ -44,7 +48,12 @@ impl Downloader {
     }
 
     pub async fn download_piece(&self, piece_index: usize) -> Result<Vec<u8>> {
-        let piece_length = self.torrent.info.piece_size(piece_index);
+        let piece_length = self
+            .torrent
+            .info
+            .as_ref()
+            .map(|i| i.piece_size(piece_index))
+            .unwrap_or(0);
 
         for peer_addr in self.peers.iter().cycle().take(3 * self.peers.len()) {
             if peer_addr != &self.peers[0] {
@@ -69,13 +78,13 @@ impl Downloader {
     }
 
     pub async fn download_all(&self, output: &str) -> Result<()> {
-        let mut file_data = Vec::with_capacity(self.torrent.info.length);
+        let mut file_data = Vec::with_capacity(self.torrent.info.as_ref().unwrap().length);
 
-        for piece_index in 0..self.torrent.info.total_pieces() {
+        for piece_index in 0..self.torrent.info.as_ref().unwrap().total_pieces() {
             info!(
                 "Downloading piece {}/{}",
                 piece_index + 1,
-                self.torrent.info.total_pieces()
+                self.torrent.info.as_ref().unwrap().total_pieces()
             );
 
             let piece_data = self.download_piece(piece_index).await?;
@@ -142,7 +151,8 @@ impl Downloader {
         hasher.update(piece_data);
         let hash = hasher.finalize();
 
-        let expected_hash = &self.torrent.info.pieces[piece_index * 20..(piece_index + 1) * 20];
+        let expected_hash =
+            &self.torrent.info.as_ref().unwrap().pieces[piece_index * 20..(piece_index + 1) * 20];
 
         if hash.as_slice() != expected_hash {
             return Err(anyhow::anyhow!("Piece hash verification failed"));

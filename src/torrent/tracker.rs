@@ -51,7 +51,7 @@ fn urlencode(bytes: &[u8]) -> String {
 pub async fn get_peers(
     announce_url: &str,
     info_hash: [u8; 20],
-    file_length: u64,
+    file_length: Option<u64>,
     config: Option<TrackerConfig>,
 ) -> Result<Vec<Peer>> {
     let config = config.unwrap_or_default();
@@ -64,7 +64,7 @@ pub async fn get_peers(
         port: config.port,
         uploaded: 0,
         downloaded: 0,
-        left: file_length,
+        left: file_length.unwrap_or(0),
         compact: config.compact as u8,
     };
 

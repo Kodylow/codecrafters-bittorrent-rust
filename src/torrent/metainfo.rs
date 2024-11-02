@@ -30,9 +30,9 @@ use super::magnet_link::MagnetLink;
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct TorrentMetainfo {
     /// URL of the tracker server
-    pub announce: String,
+    pub announce: Option<String>,
     /// Core metadata about the torrent content
-    pub info: TorrentInfo,
+    pub info: Option<TorrentInfo>,
 }
 
 impl TorrentMetainfo {
@@ -90,7 +90,10 @@ impl TorrentMetainfo {
                     _ => return Err(anyhow::anyhow!("Missing or invalid info dictionary")),
                 };
 
-                Ok(TorrentMetainfo { announce, info })
+                Ok(TorrentMetainfo {
+                    announce: Some(announce),
+                    info: Some(info),
+                })
             }
             _ => Err(anyhow::anyhow!("Invalid torrent file format")),
         }
@@ -100,16 +103,20 @@ impl TorrentMetainfo {
     pub async fn from_magnet(magnet_link: &str) -> Result<Self> {
         let magnet = MagnetLink::parse(magnet_link)?;
 
-        let torrent_info = TorrentInfo {
-            name: magnet.name,
-            length: 0,
-            piece_length: 0,
-            pieces: vec![],
+        let info = if magnet.name.is_some() {
+            Some(TorrentInfo {
+                name: magnet.name.unwrap_or_default(),
+                length: 0,
+                piece_length: 0,
+                pieces: vec![],
+            })
+        } else {
+            None
         };
 
         Ok(TorrentMetainfo {
             announce: magnet.tracker,
-            info: torrent_info,
+            info,
         })
     }
 
@@ -133,15 +140,23 @@ impl TorrentMetainfo {
 
 impl fmt::Display for TorrentMetainfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Tracker URL: {}\n", self.announce)?;
-        write!(f, "Length: {}\n", self.info.length)?;
-        if let Ok(hash) = self.info_hash() {
-            write!(f, "Info Hash: {}\n", hex::encode(hash))?;
+        match &self.announce {
+            Some(announce) => write!(f, "Tracker URL: {}\n", announce)?,
+            None => write!(f, "Tracker URL: None\n")?,
         }
-        write!(f, "Piece Length: {}\n", self.info.piece_length)?;
-        writeln!(f, "Piece Hashes:")?;
-        for hash in self.info.piece_hashes() {
-            writeln!(f, "{}", hex::encode(hash))?;
+        match &self.info {
+            Some(info) => {
+                write!(f, "Length: {}\n", info.length)?;
+                if let Ok(hash) = self.info_hash() {
+                    write!(f, "Info Hash: {}\n", hex::encode(hash))?;
+                }
+                write!(f, "Piece Length: {}\n", info.piece_length)?;
+                writeln!(f, "Piece Hashes:")?;
+                for hash in info.piece_hashes() {
+                    writeln!(f, "{}", hex::encode(hash))?;
+                }
+            }
+            None => write!(f, "Info: None\n")?,
         }
         Ok(())
     }
