@@ -33,9 +33,13 @@ fn urlencode(bytes: &[u8]) -> String {
     bytes.iter().map(|&b| format!("%{:02x}", b)).collect()
 }
 
-pub fn get_peers(announce_url: &str, info_hash: [u8; 20], file_length: u64) -> Result<Vec<Peer>> {
+pub async fn get_peers(
+    announce_url: &str,
+    info_hash: [u8; 20],
+    file_length: u64,
+) -> Result<Vec<Peer>> {
     info!("Getting peers for tracker URL: {}", announce_url);
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
 
     let request = TrackerRequest {
         peer_id: PEER_ID,
@@ -56,8 +60,8 @@ pub fn get_peers(announce_url: &str, info_hash: [u8; 20], file_length: u64) -> R
 
     info!("Tracker URL: {}", url);
 
-    let response = client.get(url).send()?;
-    let response_bytes = response.bytes()?;
+    let response = client.get(url).send().await?;
+    let response_bytes = response.bytes().await?;
 
     let bvalue = Bencode::decode_bytes(&response_bytes)?;
     info!("Response: {}", bvalue);

@@ -45,7 +45,8 @@ async fn main() -> Result<()> {
                 &torrent.announce,
                 info_hash,
                 torrent.info.length as u64,
-            )?;
+            )
+            .await?;
 
             for peer in peers {
                 println!("{}", peer);
@@ -81,7 +82,8 @@ async fn handle_download_piece(output: String, path: String, piece_index: usize)
     let info_hash = torrent.info_hash()?;
 
     let peers =
-        torrent::tracker::get_peers(&torrent.announce, info_hash, torrent.info.length as u64)?;
+        torrent::tracker::get_peers(&torrent.announce, info_hash, torrent.info.length as u64)
+            .await?;
 
     let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, info_hash);
     peer.connect().await?;
@@ -115,7 +117,8 @@ async fn handle_download(output: String, path: String) -> Result<()> {
     let info_hash = torrent.info_hash()?;
 
     let peers =
-        torrent::tracker::get_peers(&torrent.announce, info_hash, torrent.info.length as u64)?;
+        torrent::tracker::get_peers(&torrent.announce, info_hash, torrent.info.length as u64)
+            .await?;
 
     if peers.is_empty() {
         return Err(anyhow::anyhow!("No peers available"));

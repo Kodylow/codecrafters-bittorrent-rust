@@ -32,7 +32,7 @@
 use super::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Mock implementation of a BitTorrent peer for testing purposes.
 struct MockPeer {
