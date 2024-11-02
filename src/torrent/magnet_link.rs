@@ -9,6 +9,7 @@
 //! Format: magnet:?xt=urn:btih:<info-hash>&dn=<name>&tr=<tracker-url>
 
 use anyhow::Result;
+use tracing::info;
 
 /// Represents a parsed BitTorrent magnet link
 pub struct MagnetLink {
@@ -74,6 +75,8 @@ impl MagnetLink {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No tracker URL in magnet link"))?;
 
+        info!("Starting handshake process with tracker: {}", tracker);
+
         let peers = crate::torrent::tracker::get_peers(
             tracker,
             self.info_hash,
@@ -82,6 +85,7 @@ impl MagnetLink {
         )
         .await?;
 
+        info!("Received {} peers from tracker", peers.len());
         if peers.is_empty() {
             return Err(anyhow::anyhow!("No peers available"));
         }
@@ -91,14 +95,20 @@ impl MagnetLink {
             ..Default::default()
         };
 
+        info!("Attempting to connect to peer: {}", peers[0]);
         let mut peer = crate::torrent::peer::Peer::new(peers[0].to_string().parse()?, peer_config);
+
+        info!("Initiating connection...");
         peer.connect().await?;
 
+        info!("Connection established, retrieving peer ID");
         let peer_id = peer
             .peer_id
             .ok_or_else(|| anyhow::anyhow!("No peer ID received"))?;
 
+        debug!("Raw peer_id bytes: {:?}", peer_id);
         let hex_string: String = peer_id.iter().map(|b| format!("{:02X}", b)).collect();
+        info!("Peer ID (hex): {}", hex_string);
 
         Ok(hex_string)
     }
