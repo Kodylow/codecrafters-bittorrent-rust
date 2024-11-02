@@ -90,7 +90,7 @@ pub async fn get_peers(
         port: config.port,
         uploaded: 0,
         downloaded: 0,
-        left: file_length.unwrap_or(0),
+        left: file_length.unwrap_or(16848),
         compact: config.compact as u8,
     };
 
