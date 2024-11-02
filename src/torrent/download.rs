@@ -1,5 +1,6 @@
 use anyhow::Result;
 use sha1::Digest;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::{timeout, Duration};
@@ -17,6 +18,14 @@ struct PieceWork {
     index: usize,
     length: usize,
     retries: usize,
+}
+
+#[derive(Debug)]
+struct PeerState {
+    addr: String,
+    successful_pieces: usize,
+    failed_pieces: usize,
+    last_success: std::time::Instant,
 }
 
 pub struct DownloadManager {
@@ -57,21 +66,26 @@ impl DownloadManager {
         completed_pieces: Arc<Mutex<Vec<Option<Vec<u8>>>>>,
         torrent: Arc<TorrentMetainfo>,
         tx: mpsc::Sender<Result<()>>,
+        peer_states: Arc<Mutex<HashMap<String, PeerState>>>,
     ) {
         let mut peer = Peer::new(peer_addr.parse().unwrap(), info_hash);
 
         'retry: for _ in 0..MAX_PEER_RETRIES {
             match timeout(PEER_TIMEOUT, peer.connect()).await {
                 Ok(Ok(())) => {
+                    let mut consecutive_failures = 0;
+
                     loop {
-                        // Get multiple pieces to work on
+                        if consecutive_failures >= 3 {
+                            break; // Drop this peer connection and retry
+                        }
+
                         let work_batch = {
                             let mut queue = pieces_queue.lock().await;
                             if queue.is_empty() {
                                 break 'retry;
                             }
 
-                            // Take up to MAX_PENDING_REQUESTS pieces with lowest retry counts
                             let mut batch = Vec::new();
                             while batch.len() < MAX_PENDING_REQUESTS && !queue.is_empty() {
                                 if let Some(pos) = queue
@@ -90,7 +104,6 @@ impl DownloadManager {
                             break 'retry;
                         }
 
-                        // Download pieces sequentially instead of parallel
                         for piece_work in work_batch {
                             match timeout(
                                 PEER_TIMEOUT,
@@ -99,7 +112,6 @@ impl DownloadManager {
                             .await
                             {
                                 Ok(Ok(data)) => {
-                                    // Verify piece hash
                                     let mut hasher = sha1::Sha1::new();
                                     hasher.update(&data);
                                     let hash = hasher.finalize();
@@ -107,20 +119,34 @@ impl DownloadManager {
                                         [piece_work.index * 20..(piece_work.index + 1) * 20];
 
                                     if hash.as_slice() == expected_hash {
+                                        // Update peer stats
+                                        let mut states = peer_states.lock().await;
+                                        if let Some(state) = states.get_mut(&peer_addr) {
+                                            state.successful_pieces += 1;
+                                            state.last_success = std::time::Instant::now();
+                                        }
+                                        consecutive_failures = 0;
+
                                         let mut completed = completed_pieces.lock().await;
                                         completed[piece_work.index] = Some(data);
                                         info!(
-                                            "Downloaded piece {}/{}",
+                                            "Downloaded piece {}/{} from {}",
                                             piece_work.index + 1,
-                                            torrent.info.total_pieces()
+                                            torrent.info.total_pieces(),
+                                            peer_addr
                                         );
                                         continue;
                                     }
                                 }
-                                _ => {}
+                                _ => {
+                                    consecutive_failures += 1;
+                                    let mut states = peer_states.lock().await;
+                                    if let Some(state) = states.get_mut(&peer_addr) {
+                                        state.failed_pieces += 1;
+                                    }
+                                }
                             }
 
-                            // Handle failed piece download
                             let mut failed_piece = piece_work;
                             failed_piece.retries += 1;
                             if failed_piece.retries < MAX_PIECE_RETRIES {
@@ -140,8 +166,25 @@ impl DownloadManager {
     pub async fn download(&self) -> Result<Vec<u8>> {
         let (tx, mut rx) = mpsc::channel(32);
         let mut workers = vec![];
+        let peer_states = Arc::new(Mutex::new(HashMap::new()));
 
-        // Spawn worker for each peer
+        // Initialize peer states
+        {
+            let mut states = peer_states.lock().await;
+            for peer in &self.peers {
+                states.insert(
+                    peer.clone(),
+                    PeerState {
+                        addr: peer.clone(),
+                        successful_pieces: 0,
+                        failed_pieces: 0,
+                        last_success: std::time::Instant::now(),
+                    },
+                );
+            }
+        }
+
+        // Spawn initial workers
         for peer_addr in &self.peers {
             let tx = tx.clone();
             let pieces_queue = self.pieces_queue.clone();
@@ -149,6 +192,7 @@ impl DownloadManager {
             let torrent = self.torrent.clone();
             let info_hash = self.info_hash;
             let peer_addr = peer_addr.clone();
+            let peer_states = peer_states.clone();
 
             let worker = tokio::spawn(Self::worker_task(
                 peer_addr,
@@ -157,6 +201,7 @@ impl DownloadManager {
                 completed_pieces,
                 torrent,
                 tx,
+                peer_states,
             ));
             workers.push(worker);
         }
