@@ -168,3 +168,66 @@ impl Peer {
         Ok(piece_data)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener;
+    fn setup_mock_peer() -> (Peer, TcpListener) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let peer = Peer::new(addr, [1u8; 20]);
+        (peer, listener)
+    }
+
+    #[test]
+    fn test_peer_creation() {
+        let addr = "127.0.0.1:8080".parse().unwrap();
+        let info_hash = [1u8; 20];
+        let peer = Peer::new(addr, info_hash);
+
+        assert_eq!(peer.addr, addr);
+        assert_eq!(peer.info_hash, info_hash);
+        assert!(peer.stream.is_none());
+        assert!(peer.peer_id.is_none());
+    }
+
+    #[test]
+    fn test_handshake_protocol_mismatch() {
+        let (mut peer, listener) = setup_mock_peer();
+
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 68];
+            stream.read_exact(&mut buf).unwrap();
+
+            // Send back invalid protocol
+            let mut response = [0u8; 68];
+            response[1..20].copy_from_slice(b"Invalid protocol!!!!");
+            stream.write_all(&response).unwrap();
+        });
+
+        peer.connect()
+            .expect_err("Should fail with protocol mismatch");
+    }
+
+    #[test]
+    fn test_handshake_info_hash_mismatch() {
+        let (mut peer, listener) = setup_mock_peer();
+
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 68];
+            stream.read_exact(&mut buf).unwrap();
+
+            // Send back valid protocol but wrong info_hash
+            let mut response = [0u8; 68];
+            response[1..20].copy_from_slice(PROTOCOL.as_bytes());
+            response[28..48].copy_from_slice(&[2u8; 20]); // Wrong info_hash
+            stream.write_all(&response).unwrap();
+        });
+
+        peer.connect()
+            .expect_err("Should fail with info hash mismatch");
+    }
+}
