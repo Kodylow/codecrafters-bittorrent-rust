@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bencode::Bencode;
 use sha1::Digest;
-use torrent::{metainfo::TorrentMetainfo, peer::PeerConfig};
+use torrent::{message::Message, metainfo::TorrentMetainfo, peer::PeerConfig};
 use tracing::info;
 
 pub mod bencode;
@@ -130,22 +130,78 @@ async fn handle_download(output: String, path: String) -> Result<()> {
     info!("Downloading torrent file: {} to {}", path, output);
     let bytes = std::fs::read(path)?;
     let torrent = TorrentMetainfo::from_bytes(&bytes)?;
+    let info_hash = torrent.info_hash()?;
 
     let peers = torrent::tracker::get_peers(
         &torrent.announce,
-        torrent.info_hash()?,
+        info_hash,
         torrent.info.length as u64,
         Some(torrent::tracker::TrackerConfig::default()),
     )
     .await?;
 
-    let download_manager = torrent::download::DownloadManager::new(
-        torrent,
-        peers.iter().map(|p| p.to_string()).collect(),
-        None,
-    )?;
+    if peers.is_empty() {
+        return Err(anyhow::anyhow!("No peers available"));
+    }
 
-    let file_data = download_manager.download_single_peer().await?;
+    let peer_config = PeerConfig {
+        info_hash,
+        ..Default::default()
+    };
+
+    let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, peer_config);
+    peer.connect().await?;
+
+    // Wait for and verify bitfield
+    let bitfield = match peer.receive_message().await? {
+        Message::Bitfield(b) => b,
+        _ => return Err(anyhow::anyhow!("Expected bitfield message")),
+    };
+
+    // Send interested message once
+    peer.send_message(Message::Interested).await?;
+
+    // Wait for unchoke once
+    match peer.receive_message().await? {
+        Message::Unchoke => (),
+        _ => return Err(anyhow::anyhow!("Expected unchoke message")),
+    };
+
+    let mut file_data = Vec::with_capacity(torrent.info.length);
+
+    for piece_index in 0..torrent.info.total_pieces() {
+        info!(
+            "Downloading piece {}/{}",
+            piece_index + 1,
+            torrent.info.total_pieces()
+        );
+
+        // Verify piece availability in bitfield
+        let byte_index = piece_index / 8;
+        let bit_index = 7 - (piece_index % 8);
+        if byte_index >= bitfield.len() || (bitfield[byte_index] & (1 << bit_index)) == 0 {
+            return Err(anyhow::anyhow!("Peer does not have piece {}", piece_index));
+        }
+
+        let piece_length = torrent.info.piece_size(piece_index);
+        let piece_data = peer.download_piece(piece_index, piece_length).await?;
+
+        // Verify piece hash
+        let mut hasher = sha1::Sha1::new();
+        hasher.update(&piece_data);
+        let hash = hasher.finalize();
+        let expected_hash = &torrent.info.pieces[piece_index * 20..(piece_index + 1) * 20];
+
+        if hash.as_slice() != expected_hash {
+            return Err(anyhow::anyhow!(
+                "Piece {} hash verification failed",
+                piece_index
+            ));
+        }
+
+        file_data.extend_from_slice(&piece_data);
+    }
+
     tokio::fs::write(output, file_data).await?;
     info!("Download completed successfully");
     Ok(())
