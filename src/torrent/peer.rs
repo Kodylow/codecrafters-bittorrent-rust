@@ -12,7 +12,7 @@ use super::message::Message;
 pub type PeerId = [u8; 20];
 pub type InfoHash = [u8; 20];
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PeerConfig {
     pub peer_id: PeerId,
     pub info_hash: InfoHash,

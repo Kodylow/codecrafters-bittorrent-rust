@@ -149,7 +149,62 @@ async fn handle_download(output: String, path: String) -> Result<()> {
         ..Default::default()
     };
 
-    let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, peer_config);
+    let mut file_data = Vec::with_capacity(torrent.info.length);
+    let mut current_peer_index = 0;
+
+    'piece_loop: for piece_index in 0..torrent.info.total_pieces() {
+        info!(
+            "Downloading piece {}/{}",
+            piece_index + 1,
+            torrent.info.total_pieces()
+        );
+
+        // Try up to 3 times per piece
+        for attempt in 0..3 {
+            if attempt > 0 {
+                info!("Retrying piece {} (attempt {})", piece_index, attempt + 1);
+            }
+
+            // Try different peers if available
+            while current_peer_index < peers.len() {
+                let mut peer = torrent::peer::Peer::new(
+                    peers[current_peer_index].to_string().parse()?,
+                    peer_config.clone(),
+                );
+
+                match download_piece_from_peer(&mut peer, piece_index, &torrent).await {
+                    Ok(piece_data) => {
+                        file_data.extend_from_slice(&piece_data);
+                        continue 'piece_loop;
+                    }
+                    Err(e) => {
+                        info!("Failed to download from peer {}: {}", current_peer_index, e);
+                        current_peer_index += 1;
+                    }
+                }
+            }
+
+            // Reset peer index if we've tried all peers
+            current_peer_index = 0;
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        }
+
+        return Err(anyhow::anyhow!(
+            "Failed to download piece {} after multiple attempts",
+            piece_index
+        ));
+    }
+
+    tokio::fs::write(output, file_data).await?;
+    info!("Download completed successfully");
+    Ok(())
+}
+
+async fn download_piece_from_peer(
+    peer: &mut torrent::peer::Peer,
+    piece_index: usize,
+    torrent: &TorrentMetainfo,
+) -> Result<Vec<u8>> {
     peer.connect().await?;
 
     // Wait for and verify bitfield
@@ -158,51 +213,34 @@ async fn handle_download(output: String, path: String) -> Result<()> {
         _ => return Err(anyhow::anyhow!("Expected bitfield message")),
     };
 
-    // Send interested message once
+    // Verify piece availability in bitfield
+    let byte_index = piece_index / 8;
+    let bit_index = 7 - (piece_index % 8);
+    if byte_index >= bitfield.len() || (bitfield[byte_index] & (1 << bit_index)) == 0 {
+        return Err(anyhow::anyhow!("Peer does not have piece {}", piece_index));
+    }
+
+    // Send interested message
     peer.send_message(Message::Interested).await?;
 
-    // Wait for unchoke once
+    // Wait for unchoke
     match peer.receive_message().await? {
         Message::Unchoke => (),
         _ => return Err(anyhow::anyhow!("Expected unchoke message")),
     };
 
-    let mut file_data = Vec::with_capacity(torrent.info.length);
+    let piece_length = torrent.info.piece_size(piece_index);
+    let piece_data = peer.download_piece(piece_index, piece_length).await?;
 
-    for piece_index in 0..torrent.info.total_pieces() {
-        info!(
-            "Downloading piece {}/{}",
-            piece_index + 1,
-            torrent.info.total_pieces()
-        );
+    // Verify piece hash
+    let mut hasher = sha1::Sha1::new();
+    hasher.update(&piece_data);
+    let hash = hasher.finalize();
+    let expected_hash = &torrent.info.pieces[piece_index * 20..(piece_index + 1) * 20];
 
-        // Verify piece availability in bitfield
-        let byte_index = piece_index / 8;
-        let bit_index = 7 - (piece_index % 8);
-        if byte_index >= bitfield.len() || (bitfield[byte_index] & (1 << bit_index)) == 0 {
-            return Err(anyhow::anyhow!("Peer does not have piece {}", piece_index));
-        }
-
-        let piece_length = torrent.info.piece_size(piece_index);
-        let piece_data = peer.download_piece(piece_index, piece_length).await?;
-
-        // Verify piece hash
-        let mut hasher = sha1::Sha1::new();
-        hasher.update(&piece_data);
-        let hash = hasher.finalize();
-        let expected_hash = &torrent.info.pieces[piece_index * 20..(piece_index + 1) * 20];
-
-        if hash.as_slice() != expected_hash {
-            return Err(anyhow::anyhow!(
-                "Piece {} hash verification failed",
-                piece_index
-            ));
-        }
-
-        file_data.extend_from_slice(&piece_data);
+    if hash.as_slice() != expected_hash {
+        return Err(anyhow::anyhow!("Piece hash verification failed"));
     }
 
-    tokio::fs::write(output, file_data).await?;
-    info!("Download completed successfully");
-    Ok(())
+    Ok(piece_data)
 }
