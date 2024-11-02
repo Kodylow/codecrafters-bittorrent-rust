@@ -1,6 +1,8 @@
+use std::net::SocketAddr;
+
 use anyhow::Result;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use tracing::info;
 
 use super::message::Message;
@@ -34,15 +36,15 @@ impl Peer {
         }
     }
 
-    pub fn connect(&mut self) -> Result<()> {
+    pub async fn connect(&mut self) -> Result<()> {
         info!("Connecting to peer: {}", self.addr);
-        let stream = TcpStream::connect(self.addr)?;
+        let stream = TcpStream::connect(self.addr).await?;
         self.stream = Some(stream);
-        self.handshake()?;
+        self.handshake().await?;
         Ok(())
     }
 
-    fn handshake(&mut self) -> Result<()> {
+    async fn handshake(&mut self) -> Result<()> {
         let stream = self
             .stream
             .as_mut()
@@ -57,12 +59,12 @@ impl Peer {
         message.extend_from_slice(&PEER_ID);
 
         // Send handshake
-        stream.write_all(&message)?;
+        stream.write_all(&message).await?;
         info!("Sent handshake message");
 
         // Read response
         let mut response = [0u8; 68];
-        stream.read_exact(&mut response)?;
+        stream.read_exact(&mut response).await?;
         info!("Received handshake response");
 
         // Verify protocol
@@ -83,17 +85,17 @@ impl Peer {
         Ok(())
     }
 
-    pub fn send_message(&mut self, message: Message) -> Result<()> {
+    pub async fn send_message(&mut self, message: Message) -> Result<()> {
         let stream = self
             .stream
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Not connected"))?;
         let bytes = message.to_bytes();
-        stream.write_all(&bytes)?;
+        stream.write_all(&bytes).await?;
         Ok(())
     }
 
-    pub fn receive_message(&mut self) -> Result<Message> {
+    pub async fn receive_message(&mut self) -> Result<Message> {
         let stream = self
             .stream
             .as_mut()
@@ -101,7 +103,7 @@ impl Peer {
 
         // Read message length (4 bytes)
         let mut len_bytes = [0u8; 4];
-        stream.read_exact(&mut len_bytes)?;
+        stream.read_exact(&mut len_bytes).await?;
         let len = u32::from_be_bytes(len_bytes);
 
         if len == 0 {
@@ -110,23 +112,27 @@ impl Peer {
 
         // Read message body
         let mut message_bytes = vec![0u8; len as usize];
-        stream.read_exact(&mut message_bytes)?;
+        stream.read_exact(&mut message_bytes).await?;
 
         Message::from_bytes(&message_bytes)
     }
 
-    pub fn download_piece(&mut self, piece_index: usize, piece_length: usize) -> Result<Vec<u8>> {
+    pub async fn download_piece(
+        &mut self,
+        piece_index: usize,
+        piece_length: usize,
+    ) -> Result<Vec<u8>> {
         // Wait for bitfield
-        let _bitfield = match self.receive_message()? {
+        let _bitfield = match self.receive_message().await? {
             Message::Bitfield(b) => b,
             _ => return Err(anyhow::anyhow!("Expected bitfield message")),
         };
 
         // Send interested
-        self.send_message(Message::Interested)?;
+        self.send_message(Message::Interested).await?;
 
         // Wait for unchoke
-        match self.receive_message()? {
+        match self.receive_message().await? {
             Message::Unchoke => (),
             _ => return Err(anyhow::anyhow!("Expected unchoke message")),
         }
@@ -144,10 +150,11 @@ impl Peer {
                 index: piece_index as u32,
                 begin: offset,
                 length: block_size as u32,
-            })?;
+            })
+            .await?;
 
             // Receive block
-            match self.receive_message()? {
+            match self.receive_message().await? {
                 Message::Piece {
                     index,
                     begin,
@@ -172,9 +179,9 @@ impl Peer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::TcpListener;
-    fn setup_mock_peer() -> (Peer, TcpListener) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    use tokio::net::TcpListener;
+    async fn setup_mock_peer() -> (Peer, TcpListener) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let peer = Peer::new(addr, [1u8; 20]);
         (peer, listener)
@@ -192,42 +199,44 @@ mod tests {
         assert!(peer.peer_id.is_none());
     }
 
-    #[test]
-    fn test_handshake_protocol_mismatch() {
-        let (mut peer, listener) = setup_mock_peer();
+    #[tokio::test]
+    async fn test_handshake_protocol_mismatch() {
+        let (mut peer, listener) = setup_mock_peer().await;
 
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
             let mut buf = [0u8; 68];
-            stream.read_exact(&mut buf).unwrap();
+            stream.read_exact(&mut buf).await.unwrap();
 
             // Send back invalid protocol
             let mut response = [0u8; 68];
             response[1..20].copy_from_slice(b"Invalid protocol!!!!");
-            stream.write_all(&response).unwrap();
+            stream.write_all(&response).await.unwrap();
         });
 
         peer.connect()
+            .await
             .expect_err("Should fail with protocol mismatch");
     }
 
-    #[test]
-    fn test_handshake_info_hash_mismatch() {
-        let (mut peer, listener) = setup_mock_peer();
+    #[tokio::test]
+    async fn test_handshake_info_hash_mismatch() {
+        let (mut peer, listener) = setup_mock_peer().await;
 
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
             let mut buf = [0u8; 68];
-            stream.read_exact(&mut buf).unwrap();
+            stream.read_exact(&mut buf).await.unwrap();
 
             // Send back valid protocol but wrong info_hash
             let mut response = [0u8; 68];
             response[1..20].copy_from_slice(PROTOCOL.as_bytes());
             response[28..48].copy_from_slice(&[2u8; 20]); // Wrong info_hash
-            stream.write_all(&response).unwrap();
+            stream.write_all(&response).await.unwrap();
         });
 
         peer.connect()
+            .await
             .expect_err("Should fail with info hash mismatch");
     }
 }

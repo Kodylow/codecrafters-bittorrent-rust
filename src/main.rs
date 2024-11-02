@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
             let info_hash = torrent.info_hash()?;
 
             let mut peer = torrent::peer::Peer::new(peer.parse()?, info_hash);
-            peer.connect()?;
+            peer.connect().await?;
             println!("Peer ID: {}", hex::encode(peer.peer_id.unwrap()));
         }
         cli::Command::DownloadPiece {
@@ -84,7 +84,7 @@ async fn handle_download_piece(output: String, path: String, piece_index: usize)
         torrent::tracker::get_peers(&torrent.announce, info_hash, torrent.info.length as u64)?;
 
     let mut peer = torrent::peer::Peer::new(peers[0].to_string().parse()?, info_hash);
-    peer.connect()?;
+    peer.connect().await?;
 
     let piece_length = if piece_index == torrent.info.total_pieces() - 1 {
         torrent.info.piece_size(piece_index)
@@ -92,7 +92,7 @@ async fn handle_download_piece(output: String, path: String, piece_index: usize)
         torrent.info.piece_length
     };
 
-    let piece_data = peer.download_piece(piece_index, piece_length)?;
+    let piece_data = peer.download_piece(piece_index, piece_length).await?;
 
     let mut hasher = sha1::Sha1::new();
     hasher.update(&piece_data);

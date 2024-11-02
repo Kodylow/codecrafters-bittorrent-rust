@@ -30,9 +30,9 @@
 //! proper implementation of the BitTorrent specification.
 
 use super::*;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::thread;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tracing::{debug, info};
 
 /// Mock implementation of a BitTorrent peer for testing purposes.
 struct MockPeer {
@@ -41,8 +41,9 @@ struct MockPeer {
 
 impl MockPeer {
     /// Creates a new MockPeer listening on a random local port.
-    fn new() -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    async fn new() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        debug!("MockPeer listening on {}", listener.local_addr().unwrap());
         Self { listener }
     }
 
@@ -55,13 +56,16 @@ impl MockPeer {
     ///
     /// # Arguments
     /// * `handler` - Closure that processes the peer connection
-    fn handle_connection<F>(self, handler: F)
+    async fn handle_connection<F, Fut>(self, handler: F)
     where
-        F: FnOnce(TcpStream) + Send + 'static,
+        F: FnOnce(TcpStream) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
     {
-        thread::spawn(move || {
-            let (stream, _) = self.listener.accept().unwrap();
-            handler(stream);
+        tokio::spawn(async move {
+            debug!("Waiting for peer connection...");
+            let (stream, addr) = self.listener.accept().await.unwrap();
+            debug!("Accepted connection from {}", addr);
+            handler(stream).await;
         });
     }
 }
@@ -69,6 +73,7 @@ impl MockPeer {
 /// Tests serialization and deserialization of all message types.
 #[test]
 fn test_message_serialization() {
+    debug!("Starting message serialization test");
     let messages = vec![
         (message::Message::KeepAlive, vec![]),
         (message::Message::Choke, vec![0, 0, 0, 1, 0]),
@@ -91,6 +96,7 @@ fn test_message_serialization() {
     ];
 
     for (message, expected_bytes) in messages {
+        debug!("Testing message: {:?}", message);
         assert_eq!(message.to_bytes(), expected_bytes);
         if !expected_bytes.is_empty() {
             assert_eq!(
@@ -99,176 +105,227 @@ fn test_message_serialization() {
             );
         }
     }
+    debug!("Message serialization test completed");
 }
 
 /// Tests downloading a single piece from a peer.
-#[test]
-fn test_piece_download() {
-    let mock_peer = MockPeer::new();
+#[tokio::test]
+async fn test_piece_download() {
+    debug!("Starting single piece download test");
+    let mock_peer = MockPeer::new().await;
     let peer_addr = mock_peer.addr();
 
-    mock_peer.handle_connection(|mut stream| {
-        let mut handshake = [0u8; 68];
-        stream.read_exact(&mut handshake).unwrap();
-        assert_eq!(&handshake[1..20], b"BitTorrent protocol");
+    mock_peer
+        .handle_connection(|mut stream| async move {
+            debug!("Mock peer handling connection");
+            let mut handshake = [0u8; 68];
+            stream.read_exact(&mut handshake).await.unwrap();
+            debug!("Received handshake from peer");
+            assert_eq!(&handshake[1..20], b"BitTorrent protocol");
 
-        stream.write_all(&handshake).unwrap();
+            stream.write_all(&handshake).await.unwrap();
+            debug!("Sent handshake response");
 
-        let bitfield = message::Message::Bitfield(vec![0xFF]).to_bytes();
-        stream.write_all(&bitfield).unwrap();
+            let bitfield = message::Message::Bitfield(vec![0xFF]).to_bytes();
+            stream.write_all(&bitfield).await.unwrap();
+            debug!("Sent bitfield");
 
-        let mut msg_len = [0u8; 4];
-        stream.read_exact(&mut msg_len).unwrap();
-        let mut msg_type = [0u8];
-        stream.read_exact(&mut msg_type).unwrap();
-        assert_eq!(msg_type[0], 2); // Interested
-
-        stream
-            .write_all(&message::Message::Unchoke.to_bytes())
-            .unwrap();
-
-        let piece_data = vec![42u8; 16384];
-        loop {
-            let mut header = [0u8; 4];
-            if stream.read_exact(&mut header).is_err() {
-                break;
-            }
+            let mut msg_len = [0u8; 4];
+            stream.read_exact(&mut msg_len).await.unwrap();
             let mut msg_type = [0u8];
-            stream.read_exact(&mut msg_type).unwrap();
+            stream.read_exact(&mut msg_type).await.unwrap();
+            debug!("Received message type: {}", msg_type[0]);
+            assert_eq!(msg_type[0], 2); // Interested
 
-            if msg_type[0] == 6 {
-                let mut request = [0u8; 12];
-                stream.read_exact(&mut request).unwrap();
+            stream
+                .write_all(&message::Message::Unchoke.to_bytes())
+                .await
+                .unwrap();
+            debug!("Sent unchoke message");
 
-                let response = message::Message::Piece {
-                    index: 0,
-                    begin: 0,
-                    block: piece_data.clone(),
+            let piece_data = vec![42u8; 16384];
+            loop {
+                let mut header = [0u8; 4];
+                if stream.read_exact(&mut header).await.is_err() {
+                    debug!("Connection closed by peer");
+                    break;
                 }
-                .to_bytes();
-                stream.write_all(&response).unwrap();
-            }
-        }
-    });
+                let mut msg_type = [0u8];
+                stream.read_exact(&mut msg_type).await.unwrap();
+                debug!("Received request message type: {}", msg_type[0]);
 
+                if msg_type[0] == 6 {
+                    let mut request = [0u8; 12];
+                    stream.read_exact(&mut request).await.unwrap();
+                    debug!("Received piece request");
+
+                    let response = message::Message::Piece {
+                        index: 0,
+                        begin: 0,
+                        block: piece_data.clone(),
+                    }
+                    .to_bytes();
+                    stream.write_all(&response).await.unwrap();
+                    debug!("Sent piece data");
+                }
+            }
+        })
+        .await;
+
+    debug!("Connecting to mock peer at {}", peer_addr);
     let mut peer = peer::Peer::new(peer_addr, [0u8; 20]);
-    peer.connect().unwrap();
-    let piece = peer.download_piece(0, 16384).unwrap();
+    peer.connect().await.unwrap();
+    debug!("Starting piece download");
+    let piece = peer.download_piece(0, 16384).await.unwrap();
+    debug!("Piece download completed, length: {}", piece.len());
     assert_eq!(piece.len(), 16384);
     assert!(piece.iter().all(|&b| b == 42));
 }
 
 /// Tests handling of malformed messages from peers.
-#[test]
-fn test_message_error_handling() {
-    let mock_peer = MockPeer::new();
+#[tokio::test]
+async fn test_message_error_handling() {
+    debug!("Starting malformed message test");
+    let mock_peer = MockPeer::new().await;
     let peer_addr = mock_peer.addr();
 
-    mock_peer.handle_connection(|mut stream| {
-        let mut handshake = [0u8; 68];
-        stream.read_exact(&mut handshake).unwrap();
-        stream.write_all(&handshake).unwrap();
+    mock_peer
+        .handle_connection(|mut stream| async move {
+            debug!("Mock peer handling connection");
+            let mut handshake = [0u8; 68];
+            stream.read_exact(&mut handshake).await.unwrap();
+            stream.write_all(&handshake).await.unwrap();
+            debug!("Handshake completed");
 
-        stream.write_all(&[0xFF, 0xFF, 0xFF, 0xFF]).unwrap();
-    });
+            debug!("Sending malformed message");
+            stream.write_all(&[0xFF, 0xFF, 0xFF, 0xFF]).await.unwrap();
+        })
+        .await;
 
     let mut peer = peer::Peer::new(peer_addr, [0u8; 20]);
-    peer.connect().unwrap();
-    assert!(peer.download_piece(0, 16384).is_err());
+    peer.connect().await.unwrap();
+    debug!("Testing piece download with malformed message");
+    assert!(peer.download_piece(0, 16384).await.is_err());
 }
 
 /// Tests connection timeout handling for unreachable peers.
-#[test]
-fn test_peer_connection_timeout() {
-    let addr = "10.0.0.1:1234".parse().unwrap(); // Non-existent address
+#[tokio::test]
+async fn test_peer_connection_timeout() {
+    debug!("Starting connection timeout test");
+    let addr = "10.0.0.1:1234".parse().unwrap();
     let mut peer = peer::Peer::new(addr, [0u8; 20]);
-    assert!(peer.connect().is_err());
+    debug!("Attempting to connect to unreachable peer: {}", addr);
+    assert!(peer.connect().await.is_err());
 }
 
 /// Tests proper handling of keep-alive messages.
-#[test]
-fn test_message_handling_keep_alive() {
-    let mock_peer = MockPeer::new();
+#[tokio::test]
+async fn test_message_handling_keep_alive() {
+    debug!("Starting keep-alive message test");
+    let mock_peer = MockPeer::new().await;
     let peer_addr = mock_peer.addr();
 
-    mock_peer.handle_connection(|mut stream| {
-        let mut handshake = [0u8; 68];
-        stream.read_exact(&mut handshake).unwrap();
-        stream.write_all(&handshake).unwrap();
+    mock_peer
+        .handle_connection(|mut stream| async move {
+            debug!("Mock peer handling connection");
+            let mut handshake = [0u8; 68];
+            stream.read_exact(&mut handshake).await.unwrap();
+            stream.write_all(&handshake).await.unwrap();
+            debug!("Handshake completed");
 
-        // Send keep-alive message
-        stream.write_all(&[0, 0, 0, 0]).unwrap();
-    });
+            debug!("Sending keep-alive message");
+            stream.write_all(&[0, 0, 0, 0]).await.unwrap();
+        })
+        .await;
 
     let mut peer = peer::Peer::new(peer_addr, [0u8; 20]);
-    peer.connect().unwrap();
+    peer.connect().await.unwrap();
+    debug!("Waiting for keep-alive message");
 
-    match peer.receive_message().unwrap() {
-        message::Message::KeepAlive => (),
+    match peer.receive_message().await.unwrap() {
+        message::Message::KeepAlive => debug!("Received keep-alive message"),
         _ => panic!("Expected keep-alive message"),
     }
 }
 
 /// Tests downloading a complete file from a peer.
-#[test]
-fn test_download_complete_file() {
-    let mock_peer = MockPeer::new();
+#[tokio::test]
+async fn test_download_complete_file() {
+    debug!("Starting complete file download test");
+    let mock_peer = MockPeer::new().await;
     let peer_addr = mock_peer.addr();
 
-    mock_peer.handle_connection(|mut stream| {
-        // Handle handshake
-        let mut handshake = [0u8; 68];
-        stream.read_exact(&mut handshake).unwrap();
-        stream.write_all(&handshake).unwrap();
+    mock_peer
+        .handle_connection(|mut stream| async move {
+            debug!("Mock peer handling connection");
+            // Handle handshake
+            let mut handshake = [0u8; 68];
+            stream.read_exact(&mut handshake).await.unwrap();
+            stream.write_all(&handshake).await.unwrap();
+            debug!("Handshake completed");
 
-        // Send bitfield showing we have all pieces
-        let bitfield = message::Message::Bitfield(vec![0xFF]).to_bytes();
-        stream.write_all(&bitfield).unwrap();
+            // Send bitfield showing we have all pieces
+            let bitfield = message::Message::Bitfield(vec![0xFF]).to_bytes();
+            stream.write_all(&bitfield).await.unwrap();
+            debug!("Sent bitfield");
 
-        // Handle interested message
-        let mut msg_len = [0u8; 4];
-        stream.read_exact(&mut msg_len).unwrap();
-        let mut msg_type = [0u8];
-        stream.read_exact(&mut msg_type).unwrap();
-        assert_eq!(msg_type[0], 2); // Interested
-
-        // Send unchoke
-        stream
-            .write_all(&message::Message::Unchoke.to_bytes())
-            .unwrap();
-
-        // Handle piece requests
-        let piece_data = vec![42u8; 16384];
-        loop {
-            let mut header = [0u8; 4];
-            if stream.read_exact(&mut header).is_err() {
-                break;
-            }
+            // Handle interested message
+            let mut msg_len = [0u8; 4];
+            stream.read_exact(&mut msg_len).await.unwrap();
             let mut msg_type = [0u8];
-            stream.read_exact(&mut msg_type).unwrap();
+            stream.read_exact(&mut msg_type).await.unwrap();
+            debug!("Received message type: {}", msg_type[0]);
+            assert_eq!(msg_type[0], 2); // Interested
 
-            if msg_type[0] == 6 {
-                let mut request = [0u8; 12];
-                stream.read_exact(&mut request).unwrap();
+            // Send unchoke
+            stream
+                .write_all(&message::Message::Unchoke.to_bytes())
+                .await
+                .unwrap();
+            debug!("Sent unchoke message");
 
-                let response = message::Message::Piece {
-                    index: 0,
-                    begin: 0,
-                    block: piece_data.clone(),
+            // Handle piece requests
+            let piece_data = vec![42u8; 16384];
+            loop {
+                let mut header = [0u8; 4];
+                if stream.read_exact(&mut header).await.is_err() {
+                    debug!("Connection closed by peer");
+                    break;
                 }
-                .to_bytes();
-                stream.write_all(&response).unwrap();
-            }
-        }
-    });
+                let mut msg_type = [0u8];
+                stream.read_exact(&mut msg_type).await.unwrap();
+                debug!("Received request message type: {}", msg_type[0]);
 
+                if msg_type[0] == 6 {
+                    let mut request = [0u8; 12];
+                    stream.read_exact(&mut request).await.unwrap();
+                    debug!("Received piece request");
+
+                    let response = message::Message::Piece {
+                        index: 0,
+                        begin: 0,
+                        block: piece_data.clone(),
+                    }
+                    .to_bytes();
+                    stream.write_all(&response).await.unwrap();
+                    debug!("Sent piece data");
+                }
+            }
+        })
+        .await;
+
+    debug!("Connecting to mock peer at {}", peer_addr);
     let mut peer = peer::Peer::new(peer_addr, [0u8; 20]);
-    peer.connect().unwrap();
+    peer.connect().await.unwrap();
 
     // Download multiple pieces
+    debug!("Starting multi-piece download");
     for i in 0..3 {
-        let piece = peer.download_piece(i, 16384).unwrap();
+        debug!("Downloading piece {}", i);
+        let piece = peer.download_piece(i, 16384).await.unwrap();
+        debug!("Piece {} downloaded, length: {}", i, piece.len());
         assert_eq!(piece.len(), 16384);
         assert!(piece.iter().all(|&b| b == 42));
     }
+    debug!("Multi-piece download completed");
 }
