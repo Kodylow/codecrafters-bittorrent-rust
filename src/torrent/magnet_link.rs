@@ -9,7 +9,7 @@
 //! Format: magnet:?xt=urn:btih:<info-hash>&dn=<name>&tr=<tracker-url>
 
 use anyhow::Result;
-use tracing::info;
+use tracing::{debug, info};
 
 /// Represents a parsed BitTorrent magnet link
 pub struct MagnetLink {
