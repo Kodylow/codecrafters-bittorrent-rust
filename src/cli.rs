@@ -38,6 +38,8 @@ pub enum Command {
         /// The peer address in format IP:PORT
         peer: String,
     },
+    /// Download a piece from the torrent
+    #[command(name = "download-piece")]
     DownloadPiece {
         #[arg(short)]
         output: String,
